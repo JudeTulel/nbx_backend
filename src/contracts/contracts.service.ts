@@ -7,14 +7,14 @@ import * as NBXOrderBookJson from './NBXOrderBook.json';
 
 @Injectable()
 export class ContractsService {
-  private provider: ethers.providers.Provider;
+  private provider: ethers.JsonRpcProvider;
   private factoryContract: ethers.Contract;
   private factoryAddress: string;
 
   constructor() {
     // Initialize provider - this should be configured based on environment
     // For Hedera, we'll use the Hedera JSON RPC endpoint
-    this.provider = new ethers.providers.JsonRpcProvider('https://testnet.hashio.io/api');
+    this.provider = new ethers.JsonRpcProvider('https://testnet.hashio.io/api');
     
     // Factory contract address should be stored in environment variables or config
     this.factoryAddress = process.env.FACTORY_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000';
@@ -22,7 +22,7 @@ export class ContractsService {
     // Initialize factory contract
     this.factoryContract = new ethers.Contract(
       this.factoryAddress,
-      BlockExchangeFactoryJson.abi,
+      BlockExchangeFactoryJson,
       this.provider
     );
   }
@@ -35,7 +35,7 @@ export class ContractsService {
 
   // Get factory contract with signer
   private getSignedFactoryContract(privateKey: string) {
-    return this.getSignedContract(this.factoryAddress, BlockExchangeFactoryJson.abi, privateKey);
+    return this.getSignedContract(this.factoryAddress, BlockExchangeFactoryJson, privateKey);
   }
 
   // Deploy a new exchange for an SME
@@ -60,11 +60,23 @@ export class ContractsService {
     const receipt = await tx.wait();
     
     // Extract the deployed exchange address from the event logs
-    const event = receipt.events.find(e => e.event === 'ExchangeDeployed');
-    const exchangeAddress = event.args.exchangeAddress;
+    const event = receipt.logs.find((log: any) => {
+      try {
+        const parsedLog = signedFactory.interface.parseLog(log);
+        return parsedLog?.name === 'ExchangeDeployed';
+      } catch {
+        return false;
+      }
+    });
+    
+    let exchangeAddress = '0x0000000000000000000000000000000000000000';
+    if (event) {
+      const parsedEvent = signedFactory.interface.parseLog(event);
+      exchangeAddress = parsedEvent?.args?.exchangeAddress || exchangeAddress;
+    }
     
     return {
-      transactionHash: receipt.transactionHash,
+      transactionHash: receipt.hash,
       exchangeAddress: exchangeAddress
     };
   }
@@ -73,7 +85,7 @@ export class ContractsService {
   async getDeployedExchanges() {
     const count = await this.factoryContract.getDeployedExchangesCount();
     const exchanges = await this.factoryContract.getDeployedExchanges();
-    return { count: count.toNumber(), exchanges };
+    return { count: Number(count), exchanges };
   }
 
   // Get exchange address for a specific company
@@ -85,14 +97,14 @@ export class ContractsService {
   getExchangeContract(exchangeAddress: string) {
     return new ethers.Contract(
       exchangeAddress,
-      BlockExchangeJson.abi,
+      BlockExchangeJson,
       this.provider
     );
   }
 
   // Get signed exchange contract for transactions
   getSignedExchangeContract(exchangeAddress: string, privateKey: string) {
-    return this.getSignedContract(exchangeAddress, BlockExchangeJson.abi, privateKey);
+    return this.getSignedContract(exchangeAddress, BlockExchangeJson, privateKey);
   }
 
   // Whitelist an investor
@@ -101,7 +113,7 @@ export class ContractsService {
     const tx = await signedExchange.whitelistInvestor(investorAddress, status);
     const receipt = await tx.wait();
     return {
-      transactionHash: receipt.transactionHash,
+      transactionHash: receipt.hash,
       success: true
     };
   }
@@ -119,7 +131,7 @@ export class ContractsService {
     const tx = await signedExchange.transferTokens(tokenAddress, fromAddress, toAddress, amount);
     const receipt = await tx.wait();
     return {
-      transactionHash: receipt.transactionHash,
+      transactionHash: receipt.hash,
       success: true
     };
   }
@@ -130,7 +142,7 @@ export class ContractsService {
     const tx = await signedExchange.distributeDividends(amount);
     const receipt = await tx.wait();
     return {
-      transactionHash: receipt.transactionHash,
+      transactionHash: receipt.hash,
       success: true
     };
   }
@@ -141,7 +153,7 @@ export class ContractsService {
     const tx = await signedExchange.claimDividends();
     const receipt = await tx.wait();
     return {
-      transactionHash: receipt.transactionHash,
+      transactionHash: receipt.hash,
       success: true
     };
   }
@@ -152,7 +164,7 @@ export class ContractsService {
     const tx = await signedExchange.castVote(votes);
     const receipt = await tx.wait();
     return {
-      transactionHash: receipt.transactionHash,
+      transactionHash: receipt.hash,
       success: true
     };
   }

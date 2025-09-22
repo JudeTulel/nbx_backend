@@ -128,7 +128,9 @@ export class GovernanceService {
     // Note: In a real implementation, we would need to query all whitelisted addresses
     // from events or maintain a separate database of whitelisted users
     const users = await this.userModel.find();
-    const votingData = [];
+    const votingData: Array<{ username: string; address: string; votes: string }> = [];
+
+
 
     for (const user of users) {
       try {
@@ -147,8 +149,8 @@ export class GovernanceService {
           
           if (votes !== '0') {
             votingData.push({
-              username: user.username,
-              address: user.hederaEVMAccount,
+              username: user.username!,
+              address: user.hederaEVMAccount!,
               votes
             });
           }

@@ -71,7 +71,13 @@ export class MarketsService {
   // Get market overview with summary of all listed companies
   async getMarketOverview() {
     const listedCompanies = await this.getListedCompanies();
-    const marketData = [];
+    const marketData: Array<{
+      companyName: string;
+      exchangeAddress: any;
+      securityTokenAddress: any;
+      totalSupply: any;
+      otherMetrics: {};
+    }> = [];
     
     for (const company of listedCompanies) {
       try {
@@ -94,6 +100,7 @@ export class MarketsService {
           exchangeAddress,
           securityTokenAddress,
           totalSupply,
+          otherMetrics: {}  // Added missing property
           // Additional market metrics could be added here
         });
       } catch (error) {
