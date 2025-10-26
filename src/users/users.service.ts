@@ -32,6 +32,7 @@ export class UserService {
     username: string,
     password: string,
     hederaClient: Client,
+    role: string = 'user',
   ): Promise<User> {
     try {
       if (!username || !password) {
@@ -79,6 +80,7 @@ export class UserService {
       const newUser = new this.userModel({
         username,
         passwordHash,
+        role,
         hederaAccountId: accountId,
         hederaEVMAccount: `0x${hederaEvmAddress}`,
         encryptedWallet: {
@@ -156,7 +158,7 @@ export class UserService {
       // Update Hedera account with new key
       const tx = new AccountCreateTransaction()
         .setKey(hederaPublicKey)
-        .setInitialBalance(new Hbar(10))
+        .setInitialBalance(new Hbar(1))
         .setMaxAutomaticTokenAssociations(10)
         .freezeWith(hederaClient);
 
@@ -187,6 +189,24 @@ export class UserService {
     } catch (error) {
       this.logger.error(`Failed to update user ${username}: ${error.message}`);
       throw new InternalServerErrorException('Failed to update user account');
+    }
+  }
+
+  /**
+   * Updates a user's role.
+   */
+  async updateUserRole(username: string, newRole: string): Promise<User> {
+    try {
+      const user = await this.userModel.findOne({ username }).exec();
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+
+      user.role = newRole;
+      return await user.save();
+    } catch (error) {
+      this.logger.error(`Failed to update role for user ${username}: ${error.message}`);
+      throw new InternalServerErrorException('Failed to update user role');
     }
   }
 
