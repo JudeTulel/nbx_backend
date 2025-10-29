@@ -172,7 +172,11 @@ export class UserService {
       const newHederaEvmAddress = hederaPublicKey.toEvmAddress();
 
       const cipher = crypto.createCipheriv('aes-256-cbc', newKey, newIv);
-      let newEncrypted = cipher.update(hederaPrivateKey.toString(), 'utf8', 'hex');
+      let newEncrypted = cipher.update(
+        hederaPrivateKey.toString(),
+        'utf8',
+        'hex',
+      );
       newEncrypted += cipher.final('hex');
 
       // Update user document
@@ -205,7 +209,9 @@ export class UserService {
       user.role = newRole;
       return await user.save();
     } catch (error) {
-      this.logger.error(`Failed to update role for user ${username}: ${error.message}`);
+      this.logger.error(
+        `Failed to update role for user ${username}: ${error.message}`,
+      );
       throw new InternalServerErrorException('Failed to update user role');
     }
   }

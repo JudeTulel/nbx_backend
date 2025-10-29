@@ -23,7 +23,9 @@ export class UserController {
     private configService: ConfigService,
   ) {
     const operatorId = this.configService.get<string>('HEDERA_OPERATOR_ID');
-    const operatorKeyRaw = this.configService.get<string>('HEDERA_OPERATOR_KEY');
+    const operatorKeyRaw = this.configService.get<string>(
+      'HEDERA_OPERATOR_KEY',
+    );
 
     if (!operatorId || !operatorKeyRaw) {
       this.hederaClient = Client.forTestnet();

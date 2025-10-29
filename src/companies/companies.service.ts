@@ -4,16 +4,16 @@ import {
   BadRequestException,
   InternalServerErrorException,
   Logger,
-} from "@nestjs/common"
-import { InjectModel } from "@nestjs/mongoose"
-import { Model } from "mongoose"
-import { Company } from "./company.schema"
-import { CreateCompanyDto } from "./dto/create-company.dto"
-import { UpdateCompanyDto } from "./dto/update-company.dto"
+} from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { Company } from './company.schema';
+import { CreateCompanyDto } from './dto/create-company.dto';
+import { UpdateCompanyDto } from './dto/update-company.dto';
 
 @Injectable()
 export class CompaniesService {
-  private readonly logger = new Logger(CompaniesService.name)
+  private readonly logger = new Logger(CompaniesService.name);
 
   constructor(
     @InjectModel(Company.name)
@@ -26,18 +26,20 @@ export class CompaniesService {
   async create(createCompanyDto: CreateCompanyDto): Promise<Company> {
     try {
       if (!createCompanyDto.name || !createCompanyDto.symbol) {
-        throw new BadRequestException("Name and symbol are required")
+        throw new BadRequestException('Name and symbol are required');
       }
 
-      const newCompany = new this.companyModel(createCompanyDto)
-      return await newCompany.save()
+      const newCompany = new this.companyModel(createCompanyDto);
+      return await newCompany.save();
     } catch (error: any) {
       if (error.code === 11000) {
-        const field = Object.keys(error.keyPattern)[0]
-        throw new BadRequestException(`Company with this ${field} already exists`)
+        const field = Object.keys(error.keyPattern)[0];
+        throw new BadRequestException(
+          `Company with this ${field} already exists`,
+        );
       }
-      this.logger.error(`Failed to create company: ${error.message}`)
-      throw new InternalServerErrorException("Failed to create company")
+      this.logger.error(`Failed to create company: ${error.message}`);
+      throw new InternalServerErrorException('Failed to create company');
     }
   }
 
@@ -50,13 +52,17 @@ export class CompaniesService {
     sector?: string,
   ): Promise<{ companies: Company[]; total: number }> {
     try {
-      const filter = sector ? { sector } : {}
-      const companies = await this.companyModel.find(filter).skip(skip).limit(limit).exec()
-      const total = await this.companyModel.countDocuments(filter).exec()
-      return { companies, total }
+      const filter = sector ? { sector } : {};
+      const companies = await this.companyModel
+        .find(filter)
+        .skip(skip)
+        .limit(limit)
+        .exec();
+      const total = await this.companyModel.countDocuments(filter).exec();
+      return { companies, total };
     } catch (error: any) {
-      this.logger.error(`Failed to retrieve companies: ${error.message}`)
-      throw new InternalServerErrorException("Failed to retrieve companies")
+      this.logger.error(`Failed to retrieve companies: ${error.message}`);
+      throw new InternalServerErrorException('Failed to retrieve companies');
     }
   }
 
@@ -65,15 +71,15 @@ export class CompaniesService {
    */
   async findOne(id: string): Promise<Company> {
     try {
-      const company = await this.companyModel.findById(id).exec()
+      const company = await this.companyModel.findById(id).exec();
       if (!company) {
-        throw new NotFoundException(`Company with ID ${id} not found`)
+        throw new NotFoundException(`Company with ID ${id} not found`);
       }
-      return company
+      return company;
     } catch (error: any) {
-      if (error instanceof NotFoundException) throw error
-      this.logger.error(`Failed to find company: ${error.message}`)
-      throw new InternalServerErrorException("Failed to retrieve company")
+      if (error instanceof NotFoundException) throw error;
+      this.logger.error(`Failed to find company: ${error.message}`);
+      throw new InternalServerErrorException('Failed to retrieve company');
     }
   }
 
@@ -82,39 +88,44 @@ export class CompaniesService {
    */
   async findBySymbol(symbol: string): Promise<Company> {
     try {
-      const company = await this.companyModel.findOne({ symbol }).exec()
+      const company = await this.companyModel.findOne({ symbol }).exec();
       if (!company) {
-        throw new NotFoundException(`Company with symbol ${symbol} not found`)
+        throw new NotFoundException(`Company with symbol ${symbol} not found`);
       }
-      return company
+      return company;
     } catch (error: any) {
-      if (error instanceof NotFoundException) throw error
-      this.logger.error(`Failed to find company by symbol: ${error.message}`)
-      throw new InternalServerErrorException("Failed to retrieve company")
+      if (error instanceof NotFoundException) throw error;
+      this.logger.error(`Failed to find company by symbol: ${error.message}`);
+      throw new InternalServerErrorException('Failed to retrieve company');
     }
   }
 
   /**
    * Updates a company by ID
    */
-  async update(id: string, updateCompanyDto: UpdateCompanyDto): Promise<Company> {
+  async update(
+    id: string,
+    updateCompanyDto: UpdateCompanyDto,
+  ): Promise<Company> {
     try {
       const company = await this.companyModel
         .findByIdAndUpdate(id, updateCompanyDto, { new: true })
-        .exec()
+        .exec();
 
       if (!company) {
-        throw new NotFoundException(`Company with ID ${id} not found`)
+        throw new NotFoundException(`Company with ID ${id} not found`);
       }
-      return company
+      return company;
     } catch (error: any) {
-      if (error instanceof NotFoundException) throw error
+      if (error instanceof NotFoundException) throw error;
       if (error.code === 11000) {
-        const field = Object.keys(error.keyPattern)[0]
-        throw new BadRequestException(`Company with this ${field} already exists`)
+        const field = Object.keys(error.keyPattern)[0];
+        throw new BadRequestException(
+          `Company with this ${field} already exists`,
+        );
       }
-      this.logger.error(`Failed to update company: ${error.message}`)
-      throw new InternalServerErrorException("Failed to update company")
+      this.logger.error(`Failed to update company: ${error.message}`);
+      throw new InternalServerErrorException('Failed to update company');
     }
   }
 
@@ -123,15 +134,15 @@ export class CompaniesService {
    */
   async remove(id: string): Promise<{ message: string }> {
     try {
-      const company = await this.companyModel.findByIdAndDelete(id).exec()
+      const company = await this.companyModel.findByIdAndDelete(id).exec();
       if (!company) {
-        throw new NotFoundException(`Company with ID ${id} not found`)
+        throw new NotFoundException(`Company with ID ${id} not found`);
       }
-      return { message: `Company ${company.name} deleted successfully` }
+      return { message: `Company ${company.name} deleted successfully` };
     } catch (error: any) {
-      if (error instanceof NotFoundException) throw error
-      this.logger.error(`Failed to delete company: ${error.message}`)
-      throw new InternalServerErrorException("Failed to delete company")
+      if (error instanceof NotFoundException) throw error;
+      this.logger.error(`Failed to delete company: ${error.message}`);
+      throw new InternalServerErrorException('Failed to delete company');
     }
   }
 
@@ -143,17 +154,17 @@ export class CompaniesService {
     priceEntry: { date: string; price: number },
   ): Promise<Company> {
     try {
-      const company = await this.companyModel.findById(id).exec()
+      const company = await this.companyModel.findById(id).exec();
       if (!company) {
-        throw new NotFoundException(`Company with ID ${id} not found`)
+        throw new NotFoundException(`Company with ID ${id} not found`);
       }
 
-      company.priceHistory.push(priceEntry)
-      return await company.save()
+      company.priceHistory.push(priceEntry);
+      return await company.save();
     } catch (error: any) {
-      if (error instanceof NotFoundException) throw error
-      this.logger.error(`Failed to update price history: ${error.message}`)
-      throw new InternalServerErrorException("Failed to update price history")
+      if (error instanceof NotFoundException) throw error;
+      this.logger.error(`Failed to update price history: ${error.message}`);
+      throw new InternalServerErrorException('Failed to update price history');
     }
   }
 }

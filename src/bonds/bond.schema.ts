@@ -2,45 +2,27 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
 @Schema({ timestamps: true })
-export class Equity extends Document {
+export class Bond extends Document {
   @Prop({ required: true })
-  companyId: string; // Reference to the company creating this equity
+  companyId: string; // Reference to the company creating this bond
 
   @Prop({ required: true })
   diamondOwnerAccount: string; // Hedera id of the account deploying the security
 
   @Prop({ required: true })
-  votingRight: boolean;
-
-  @Prop({ required: true })
-  informationRight: boolean;
-
-  @Prop({ required: true })
-  liquidationRight: boolean;
-
-  @Prop({ required: true })
-  subscriptionRight: boolean;
-
-  @Prop({ required: true })
-  conversionRight: boolean;
-
-  @Prop({ required: true })
-  redemptionRight: boolean;
-
-  @Prop({ required: true })
-  putRight: boolean;
-
-  @Prop({ required: true })
-  dividendRight: boolean;
-
-  @Prop({ required: true })
   currency: string; // hexadecimal of the currency's 3 letter ISO code
 
   @Prop({ required: true })
-  numberOfShares: number; // maximum supply
+  numberOfUnits: number; // maximum supply
 
   @Prop({ required: true })
-  nominalValue: number; // value of a single equity
+  nominalValue: number; // value of a single bond
+
+  @Prop({ required: true })
+  startingDate: number; // Bond's starting date in seconds
+
+  @Prop({ required: true })
+  maturityDate: number; // Bond's maturity date in seconds
 
   @Prop({ required: true })
   regulationType: number; // 0: no regulation, 1: Reg S, 2: Reg D
@@ -65,7 +47,7 @@ export class Equity extends Document {
 
   // Response fields from SDK
   @Prop()
-  type: string; // "EQUITY"
+  type: string; // "BOND"
 
   @Prop({ default: '0' })
   totalSupply: string;
@@ -88,12 +70,12 @@ export class Equity extends Document {
   @Prop()
   transactionId: string; // Id of the Hedera transaction
 
-  // Additional fields for dividends and voting rights
+  // Additional fields for coupons
   @Prop({
     type: [
       {
         id: String,
-        amountPerUnitOfSecurity: Number,
+        rate: Number,
         recordTimestamp: Number,
         executionTimestamp: Number,
         transactionId: String,
@@ -101,31 +83,13 @@ export class Equity extends Document {
     ],
     default: [],
   })
-  dividends: Array<{
+  coupons: Array<{
     id: string;
-    amountPerUnitOfSecurity: number;
+    rate: number;
     recordTimestamp: number;
     executionTimestamp: number;
     transactionId: string;
   }>;
-
-  @Prop({
-    type: [
-      {
-        id: String,
-        recordTimestamp: Number,
-        data: String,
-        transactionId: String,
-      },
-    ],
-    default: [],
-  })
-  votingRights: Array<{
-    id: string;
-    recordTimestamp: number;
-    data: string;
-    transactionId: string;
-  }>;
 }
 
-export const EquitySchema = SchemaFactory.createForClass(Equity);
+export const BondSchema = SchemaFactory.createForClass(Bond);

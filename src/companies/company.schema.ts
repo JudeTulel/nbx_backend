@@ -1,43 +1,43 @@
-import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose"
-import { Document } from "mongoose"
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document } from 'mongoose';
 
 @Schema({ timestamps: true })
 export class Company extends Document {
   @Prop({ required: true, unique: true })
-  name: string
+  name: string;
 
   @Prop({ required: true, unique: true })
-  symbol: string
+  symbol: string;
 
   @Prop({ required: true, unique: true })
-  ticker: string
+  ticker: string;
 
   @Prop({ required: true })
-  sector: string
+  sector: string;
 
   @Prop({ required: true })
-  price: number
+  price: number;
 
   @Prop({ required: true })
-  change: number
+  change: number;
 
   @Prop({ required: true })
-  marketCap: string
+  marketCap: string;
 
   @Prop({ required: true })
-  volume: string
+  volume: string;
 
   @Prop({ required: true })
-  totalSupply: string
+  totalSupply: string;
 
   @Prop({ required: true })
-  circulatingSupply: string
+  circulatingSupply: string;
 
   @Prop({ required: true })
-  description: string
+  description: string;
 
   @Prop({ type: [String], default: [] })
-  highlights: string[]
+  highlights: string[];
 
   @Prop({
     type: [
@@ -48,18 +48,31 @@ export class Company extends Document {
     ],
     default: [],
   })
-  team: Array<{ name: string; position: string }>
+  team: Array<{ name: string; position: string }>;
 
   @Prop({
     type: [
       {
         name: String,
         type: String,
+        fileName: String,
+        path: String,
+        size: Number,
+        mimeType: String,
+        uploadedAt: Date,
       },
     ],
     default: [],
   })
-  documents: Array<{ name: string; type: string }>
+  documents: Array<{
+    name: string;
+    type: string;
+    fileName?: string;
+    path?: string;
+    size?: number;
+    mimeType?: string;
+    uploadedAt?: Date;
+  }>;
 
   @Prop({
     type: [
@@ -70,7 +83,7 @@ export class Company extends Document {
     ],
     default: [],
   })
-  priceHistory: Array<{ date: string; price: number }>
+  priceHistory: Array<{ date: string; price: number }>;
 }
 
-export const CompanySchema = SchemaFactory.createForClass(Company)
+export const CompanySchema = SchemaFactory.createForClass(Company);
