@@ -49,8 +49,8 @@ export class EquitiesService {
           walletFound: () => this.logger.log('Wallet found'),
         },
         configuration: {
-          factoryAddress: process.env.FACTORY_ADDRESS || '0.0.1234567',
-          resolverAddress: process.env.RESOLVER_ADDRESS || '0.0.1234568',
+          factoryAddress: process.env.FACTORY_ADDRESS,
+          resolverAddress: process.env.RESOLVER_ADDRESS 
         },
         factories: {
           factories: [],
