@@ -25,7 +25,7 @@ export class CompaniesService {
    */
   async create(createCompanyDto: CreateCompanyDto): Promise<Company> {
     try {
-      if (!createCompanyDto.name || !createCompanyDto.symbol) {
+      if (!createCompanyDto.name || !createCompanyDto.symbol || !createCompanyDto.useremail) {
         throw new BadRequestException('Name and symbol are required');
       }
 
