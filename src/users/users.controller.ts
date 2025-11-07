@@ -48,14 +48,14 @@ export class UserController {
 
   @Post()
   async createUser(
-    @Body() createUserDto: { username: string; password: string },
+    @Body() createUserDto: { useremail: string; password: string },
   ) {
     try {
-      const { username, password } = createUserDto;
+      const { useremail, password } = createUserDto;
 
-      if (!username || !password) {
+      if (!useremail || !password) {
         throw new HttpException(
-          'Username and password are required',
+          'useremail and password are required',
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -68,19 +68,19 @@ export class UserController {
       }
 
       const user = await this.userService.createUser(
-        username,
+        useremail,
         password,
         this.hederaClient,
       );
 
       return {
-        username: user.username,
+        useremail: user.useremail,
         hederaAccountId: user.hederaAccountId,
         hederaEVMAccount: user.hederaEVMAccount,
       };
     } catch (error) {
       if (error.code === 11000) {
-        throw new HttpException('Username already exists', HttpStatus.CONFLICT);
+        throw new HttpException('useremail already exists', HttpStatus.CONFLICT);
       }
       throw new HttpException(
         error.message || 'Error creating user',
@@ -91,27 +91,27 @@ export class UserController {
 
   @Post('login')
   async login(
-    @Body() body: { username: string; password: string },
+    @Body() body: { useremail: string; password: string },
     @Res({ passthrough: true }) res: Response,
   ) {
     try {
-      const user = await this.userService.login(body.username, body.password);
-      return { message: 'Logged in', user: { username: user.username } };
+      const user = await this.userService.login(body.useremail, body.password);
+      return { message: 'Logged in', user: { useremail: user.useremail } };
     } catch (error) {
       res.status(401);
       return { message: (error as Error).message };
     }
   }
 
-  @Get(':username')
-  async getUser(@Param('username') username: string) {
+  @Get(':useremail')
+  async getUser(@Param('useremail') useremail: string) {
     try {
-      const user = await this.userService.findOne(username);
+      const user = await this.userService.findOne(useremail);
       if (!user) {
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
       return {
-        username: user.username,
+        useremail: user.useremail,
         hederaAccountId: user.hederaAccountId,
         hederaEVMAccount: user.hederaEVMAccount,
       };
@@ -123,9 +123,9 @@ export class UserController {
     }
   }
 
-  @Put(':username')
+  @Put(':useremail')
   async updateUser(
-    @Param('username') username: string,
+    @Param('useremail') useremail: string,
     @Body() updateUserDto: { password?: string },
   ) {
     try {
@@ -144,13 +144,13 @@ export class UserController {
       }
 
       const user = await this.userService.updateUser(
-        username,
+        useremail,
         updateUserDto.password,
         this.hederaClient,
       );
 
       return {
-        username: user.username,
+        useremail: user.useremail,
         hederaAccountId: user.hederaAccountId,
         hederaEVMAccount: user.hederaEVMAccount,
       };
@@ -162,15 +162,15 @@ export class UserController {
     }
   }
 
-  @Post(':username/sign-transaction')
+  @Post(':useremail/sign-transaction')
   async signTransaction(
-    @Param('username') username: string,
+    @Param('useremail') useremail: string,
     @Body() body: { transaction: string; password: string },
     @Res({ passthrough: true }) res: Response,
   ) {
     try {
       const receipt = await this.userService.signTransaction(
-        username,
+        useremail,
         body.transaction,
         body.password,
       );

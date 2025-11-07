@@ -1,5 +1,6 @@
 export class UpdateCompanyDto {
   name?: string;
+  useremail? : string;
   symbol?: string;
   ticker?: string;
   sector?: string;

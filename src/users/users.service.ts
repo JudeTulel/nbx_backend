@@ -29,14 +29,14 @@ export class UserService {
    * Creates a new user with a corresponding Hedera account.
    */
   async createUser(
-    username: string,
+    useremail: string,
     password: string,
     hederaClient: Client,
     role: string = 'user',
   ): Promise<User> {
     try {
-      if (!username || !password) {
-        throw new Error('Username and password are required.');
+      if (!useremail || !password) {
+        throw new Error('useremail and password are required.');
       }
 
       const passwordHash = await bcrypt.hash(password, 10);
@@ -78,7 +78,7 @@ export class UserService {
 
       // Create and save the user in MongoDB
       const newUser = new this.userModel({
-        username,
+        useremail,
         passwordHash,
         role,
         hederaAccountId: accountId,
@@ -98,17 +98,17 @@ export class UserService {
   }
 
   /**
-   * Finds a user by username.
+   * Finds a user by useremail.
    */
-  async findOne(username: string): Promise<User> {
+  async findOne(useremail: string): Promise<User> {
     try {
-      const user = await this.userModel.findOne({ username }).exec();
+      const user = await this.userModel.findOne({ useremail }).exec();
       if (!user) {
         throw new NotFoundException('User not found');
       }
       return user;
     } catch (error) {
-      this.logger.error(`Failed to find user ${username}: ${error.message}`);
+      this.logger.error(`Failed to find user ${useremail}: ${error.message}`);
       throw new InternalServerErrorException('Failed to retrieve user');
     }
   }
@@ -117,12 +117,12 @@ export class UserService {
    * Updates a user's password and re-encrypts their Hedera private key.
    */
   async updateUser(
-    username: string,
+    useremail: string,
     newPassword: string,
     hederaClient: Client,
   ): Promise<User> {
     try {
-      const user = await this.userModel.findOne({ username }).exec();
+      const user = await this.userModel.findOne({ useremail }).exec();
       if (!user) {
         throw new NotFoundException('User not found');
       }
@@ -191,7 +191,7 @@ export class UserService {
 
       return await user.save();
     } catch (error) {
-      this.logger.error(`Failed to update user ${username}: ${error.message}`);
+      this.logger.error(`Failed to update user ${useremail}: ${error.message}`);
       throw new InternalServerErrorException('Failed to update user account');
     }
   }
@@ -199,9 +199,9 @@ export class UserService {
   /**
    * Updates a user's role.
    */
-  async updateUserRole(username: string, newRole: string): Promise<User> {
+  async updateUserRole(useremail: string, newRole: string): Promise<User> {
     try {
-      const user = await this.userModel.findOne({ username }).exec();
+      const user = await this.userModel.findOne({ useremail }).exec();
       if (!user) {
         throw new NotFoundException('User not found');
       }
@@ -210,7 +210,7 @@ export class UserService {
       return await user.save();
     } catch (error) {
       this.logger.error(
-        `Failed to update role for user ${username}: ${error.message}`,
+        `Failed to update role for user ${useremail}: ${error.message}`,
       );
       throw new InternalServerErrorException('Failed to update user role');
     }
@@ -219,8 +219,8 @@ export class UserService {
   /**
    * Logs a user in by verifying their credentials.
    */
-  async login(username: string, password: string): Promise<User> {
-    const user = await this.userModel.findOne({ username }).exec();
+  async login(useremail: string, password: string): Promise<User> {
+    const user = await this.userModel.findOne({ useremail }).exec();
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -237,11 +237,11 @@ export class UserService {
    * Signs a Hedera transaction with the user's private key.
    */
   async signTransaction(
-    username: string,
+    useremail: string,
     transaction: string,
     password: string,
   ): Promise<any> {
-    const user = await this.userModel.findOne({ username }).exec();
+    const user = await this.userModel.findOne({ useremail }).exec();
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -290,7 +290,7 @@ export class UserService {
       return receipt;
     } catch (error) {
       this.logger.error(
-        `Failed to sign transaction for user ${username}: ${error.message}`,
+        `Failed to sign transaction for user ${useremail}: ${error.message}`,
       );
       throw new InternalServerErrorException('Failed to process transaction');
     }

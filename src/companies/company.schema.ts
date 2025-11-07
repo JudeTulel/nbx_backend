@@ -6,6 +6,9 @@ export class Company extends Document {
   @Prop({ required: true, unique: true })
   name: string;
 
+  @Prop ({required:true,unique:true})
+  useremail: string; // Refrences user document that operates on behalf of company
+
   @Prop({ required: true, unique: true })
   symbol: string;
 
@@ -15,22 +18,22 @@ export class Company extends Document {
   @Prop({ required: true })
   sector: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true,default: 0 })
   price: number;
 
-  @Prop({ required: true })
+  @Prop({ required: true, default: 0 })
   change: number;
 
   @Prop({ required: true })
   marketCap: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true , default: 0 })
   volume: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, default: 0  })
   totalSupply: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true , default: 0 })
   circulatingSupply: string;
 
   @Prop({ required: true })

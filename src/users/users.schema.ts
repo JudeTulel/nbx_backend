@@ -10,13 +10,14 @@ export class User {
   // @Prop({ required: true, unique: true, auto: true })
   // _id: string;
 
+
   @Prop({ required: true, unique: true })
-  username: string;
+  useremail: string;
 
   @Prop({ required: true })
   passwordHash: string;
 
-  @Prop({ required: true, default: 'user' })
+  @Prop({ required: true, default: 'investor' })
   role: string;
 
   @Prop()
