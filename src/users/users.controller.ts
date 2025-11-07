@@ -96,7 +96,7 @@ export class UserController {
   ) {
     try {
       const user = await this.userService.login(body.useremail, body.password);
-      return { message: 'Logged in', user: { useremail: user.useremail } };
+      return { message: 'Logged in', user: { useremail: user.useremail, role: user.role } };
     } catch (error) {
       res.status(401);
       return { message: (error as Error).message };
