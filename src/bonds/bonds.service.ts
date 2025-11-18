@@ -8,77 +8,27 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Bond } from './bond.schema';
 import { CreateBondDto, SetCouponDto } from './dto/create-bond.dto';
+import { HashgraphService } from '../hashgraph/hashgraph.service';
 
 @Injectable()
 export class BondsService {
   private readonly logger = new Logger(BondsService.name);
-  private network: any; // Network SDK instance
+  // Network handled by HashgraphService
 
   constructor(
     @InjectModel(Bond.name)
     private readonly bondModel: Model<Bond>,
+    private readonly hashgraph: HashgraphService,
   ) {}
 
-  /**
-   * Initialize the SDK (this should be called during app startup)
-   */
-  async initializeSDK() {
-    try {
-      // Import the SDK dynamically
-      const { Network } = await import('@hashgraph/asset-tokenization-sdk');
-
-      this.network = Network;
-
-      // Initialize with testnet configuration
-      const supportedWallets = await this.network.init({
-        network: 'testnet',
-        mirrorNode: {
-          name: 'Hedera Testnet',
-          baseUrl: 'https://testnet.mirrornode.hedera.com',
-        },
-        rpcNode: {
-          name: 'Hedera Testnet',
-          baseUrl: 'https://testnet.hashio.io/api',
-        },
-        events: {
-          walletInit: () => this.logger.log('Wallet initialized'),
-          walletFound: () => this.logger.log('Wallet found'),
-        },
-        configuration: {
-          factoryAddress: process.env.FACTORY_ADDRESS || '0.0.1234567',
-          resolverAddress: process.env.RESOLVER_ADDRESS || '0.0.1234568',
-        },
-        factories: {
-          factories: [],
-        },
-        resolvers: {
-          resolvers: [],
-        },
-      });
-
-      this.logger.log('Asset Tokenization SDK initialized successfully');
-      return supportedWallets;
-    } catch (error) {
-      this.logger.error(`Failed to initialize SDK: ${error.message}`);
-      throw new InternalServerErrorException(
-        'Failed to initialize Asset Tokenization SDK',
-      );
-    }
-  }
 
   /**
    * Create a new bond using the SDK
    */
   async create(createBondDto: CreateBondDto): Promise<Bond> {
     try {
-      if (!this.network) {
-        await this.initializeSDK();
-      }
-
-      // Import Bond port
-      const { Bond: BondPort, CreateBondRequest } = await import(
-        '@hashgraph/asset-tokenization-sdk'
-      );
+      const BondPort = await this.hashgraph.getBondPort();
+      const { CreateBondRequest } = await import('@hashgraph/asset-tokenization-sdk');
 
       const bondRequest = new CreateBondRequest({
         name: `Bond for ${createBondDto.companyId}`,
@@ -134,13 +84,8 @@ export class BondsService {
    */
   async setCoupon(setCouponDto: SetCouponDto): Promise<any> {
     try {
-      if (!this.network) {
-        await this.initializeSDK();
-      }
-
-      const { Bond: BondPort, SetCouponRequest } = await import(
-        '@hashgraph/asset-tokenization-sdk'
-      );
+      const BondPort = await this.hashgraph.getBondPort();
+      const { SetCouponRequest } = await import('@hashgraph/asset-tokenization-sdk');
 
       const couponRequest = new SetCouponRequest({
         securityId: setCouponDto.securityId,

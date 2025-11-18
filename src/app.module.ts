@@ -8,6 +8,8 @@ import { EquitiesModule } from './equities/equities.module';
 import { CompaniesModule } from './companies/companies.module';
 import { BondsModule } from './bonds/bonds.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { AuthModule } from './auth/auth.module';
+import { HashgraphModule } from './hashgraph/hashgraph.module';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { UploadsModule } from './uploads/uploads.module';
     CompaniesModule,
     BondsModule,
     UploadsModule,
+    AuthModule,
+    HashgraphModule,
   ],
   controllers: [AppController],
   providers: [AppService],

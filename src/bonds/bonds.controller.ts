@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BondsService } from './bonds.service';
 import { CreateBondDto, SetCouponDto } from './dto/create-bond.dto';
 
@@ -10,6 +11,7 @@ export class BondsController {
    * POST /bonds
    * Creates a new bond
    */
+  @UseGuards(JwtAuthGuard)
   @Post()
   async create(@Body() createBondDto: CreateBondDto) {
     return await this.bondsService.create(createBondDto);
@@ -19,6 +21,7 @@ export class BondsController {
    * POST /bonds/:id/coupons
    * Sets coupon for a bond
    */
+  @UseGuards(JwtAuthGuard)
   @Post(':id/coupons')
   async setCoupon(@Param('id') id: string, @Body() setCouponDto: SetCouponDto) {
     setCouponDto.securityId = id;

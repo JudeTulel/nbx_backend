@@ -7,6 +7,7 @@ import {
   Param,
   Query,
   Body,
+  UseGuards,
 } from '@nestjs/common';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
@@ -15,6 +16,7 @@ import { EquitiesService } from '../equities/equities.service';
 import { BondsService } from '../bonds/bonds.service';
 import { CreateEquityDto } from '../equities/dto/create-equity.dto';
 import { CreateBondDto } from '../bonds/dto/create-bond.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('companies')
 export class CompaniesController {
@@ -28,6 +30,7 @@ export class CompaniesController {
    * POST /companies
    * Creates a new company
    */
+  @UseGuards(JwtAuthGuard)
   @Post()
   async create(@Body() createCompanyDto: CreateCompanyDto) {
     return await this.companiesService.create(createCompanyDto);
@@ -70,6 +73,7 @@ export class CompaniesController {
    * PATCH /companies/:id
    * Updates a company by ID
    */
+  @UseGuards(JwtAuthGuard)
   @Patch(':id')
   async update(
     @Param('id') id: string,
@@ -82,6 +86,7 @@ export class CompaniesController {
    * DELETE /companies/:id
    * Deletes a company by ID
    */
+  @UseGuards(JwtAuthGuard)
   @Delete(':id')
   async remove(@Param('id') id: string) {
     return await this.companiesService.remove(id);
@@ -91,6 +96,7 @@ export class CompaniesController {
    * PATCH /companies/:id/price-history
    * Updates price history for a company
    */
+  @UseGuards(JwtAuthGuard)
   @Patch(':id/price-history')
   async updatePriceHistory(
     @Param('id') id: string,
@@ -103,6 +109,7 @@ export class CompaniesController {
    * POST /companies/:id/equities
    * Creates a new equity for a company
    */
+  @UseGuards(JwtAuthGuard)
   @Post(':id/equities')
   async createEquity(
     @Param('id') companyId: string,
@@ -118,6 +125,7 @@ export class CompaniesController {
    * POST /companies/:id/bonds
    * Creates a new bond for a company
    */
+  @UseGuards(JwtAuthGuard)
   @Post(':id/bonds')
   async createBond(
     @Param('id') companyId: string,

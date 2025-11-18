@@ -8,11 +8,13 @@ import {
   HttpException,
   HttpStatus,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { UserService } from './users.service';
 import { Client, PrivateKey } from '@hashgraph/sdk';
 import { ConfigService } from '@nestjs/config';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('users')
 export class UserController {
@@ -42,67 +44,13 @@ export class UserController {
       this.hederaClient = Client.forTestnet().setOperator(
         operatorId,
         operatorKey,
-      );
-    }
-  }
-
-  @Post()
-  async createUser(
-    @Body() createUserDto: { useremail: string; password: string },
-  ) {
-    try {
-      const { useremail, password } = createUserDto;
-
-      if (!useremail || !password) {
-        throw new HttpException(
-          'useremail and password are required',
-          HttpStatus.BAD_REQUEST,
         );
-      }
-
-      if (password.length < 8) {
-        throw new HttpException(
-          'Password must be at least 8 characters long',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-
-      const user = await this.userService.createUser(
-        useremail,
-        password,
-        this.hederaClient,
-      );
-
-      return {
-        useremail: user.useremail,
-        hederaAccountId: user.hederaAccountId,
-        hederaEVMAccount: user.hederaEVMAccount,
-      };
-    } catch (error) {
-      if (error.code === 11000) {
-        throw new HttpException('useremail already exists', HttpStatus.CONFLICT);
-      }
-      throw new HttpException(
-        error.message || 'Error creating user',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
     }
   }
 
-  @Post('login')
-  async login(
-    @Body() body: { useremail: string; password: string },
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    try {
-      const user = await this.userService.login(body.useremail, body.password);
-      return { message: 'Logged in', user: { useremail: user.useremail, role: user.role } };
-    } catch (error) {
-      res.status(401);
-      return { message: (error as Error).message };
-    }
-  }
+  // The original POST /users (create user) and POST /users/login are now handled by the AuthModule.
 
+  @UseGuards(JwtAuthGuard)
   @Get(':useremail')
   async getUser(@Param('useremail') useremail: string) {
     try {
@@ -123,6 +71,7 @@ export class UserController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @Put(':useremail')
   async updateUser(
     @Param('useremail') useremail: string,
@@ -162,6 +111,7 @@ export class UserController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
   @Post(':useremail/sign-transaction')
   async signTransaction(
     @Param('useremail') useremail: string,

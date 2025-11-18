@@ -103,7 +103,7 @@ export class UserService {
    */
   async findOne(useremail: string): Promise<User> {
     try {
-      const user = await this.userModel.findOne({ useremail }).exec();
+      const user = await this.userModel.findOne({ useremail }).select('+passwordHash').exec();
       if (!user) {
         throw new NotFoundException('User not found');
       }
@@ -123,7 +123,7 @@ export class UserService {
     hederaClient: Client,
   ): Promise<User> {
     try {
-      const user = await this.userModel.findOne({ useremail }).exec();
+      const user = await this.userModel.findOne({ useremail }).select('+passwordHash').exec();
       if (!user) {
         throw new NotFoundException('User not found');
       }
@@ -202,7 +202,7 @@ export class UserService {
    */
   async updateUserRole(useremail: string, newRole: string): Promise<User> {
     try {
-      const user = await this.userModel.findOne({ useremail }).exec();
+      const user = await this.userModel.findOne({ useremail }).select('+passwordHash').exec();
       if (!user) {
         throw new NotFoundException('User not found');
       }
@@ -221,7 +221,7 @@ export class UserService {
    * Logs a user in by verifying their credentials.
    */
   async login(useremail: string, password: string): Promise<User> {
-    const user = await this.userModel.findOne({ useremail }).exec();
+    const user = await this.userModel.findOne({ useremail }).select('+passwordHash').exec();
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -242,7 +242,7 @@ export class UserService {
     transaction: string,
     password: string,
   ): Promise<any> {
-    const user = await this.userModel.findOne({ useremail }).exec();
+    const user = await this.userModel.findOne({ useremail }).select('+passwordHash').exec();
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }

@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { EquitiesService } from './equities.service';
 import {
   CreateEquityDto,
@@ -14,6 +15,7 @@ export class EquitiesController {
    * POST /equities
    * Creates a new equity
    */
+  @UseGuards(JwtAuthGuard)
   @Post()
   async create(@Body() createEquityDto: CreateEquityDto) {
     return await this.equitiesService.create(createEquityDto);
@@ -23,6 +25,7 @@ export class EquitiesController {
    * POST /equities/:id/dividends
    * Sets dividends for an equity
    */
+  @UseGuards(JwtAuthGuard)
   @Post(':id/dividends')
   async setDividends(
     @Param('id') id: string,
@@ -36,6 +39,7 @@ export class EquitiesController {
    * POST /equities/:id/voting-rights
    * Sets voting rights for an equity
    */
+  @UseGuards(JwtAuthGuard)
   @Post(':id/voting-rights')
   async setVotingRights(
     @Param('id') id: string,

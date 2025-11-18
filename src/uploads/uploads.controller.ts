@@ -8,9 +8,11 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadsService } from './uploads.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('uploads')
 export class UploadsController {
@@ -20,6 +22,7 @@ export class UploadsController {
    * POST /uploads/companies/:companyId/documents
    * Uploads a document for a company
    */
+  @UseGuards(JwtAuthGuard)
   @Post('companies/:companyId/documents')
   @UseInterceptors(FileInterceptor('file'))
   async uploadDocument(
@@ -55,6 +58,7 @@ export class UploadsController {
    * DELETE /uploads/companies/:companyId/documents/:documentId
    * Deletes a document for a company
    */
+  @UseGuards(JwtAuthGuard)
   @Delete('companies/:companyId/documents/:documentId')
   async deleteDocument(
     @Param('companyId') companyId: string,

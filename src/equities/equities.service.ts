@@ -12,77 +12,32 @@ import {
   SetDividendDto,
   SetVotingRightsDto,
 } from './dto/create-equity.dto';
+import { HashgraphService } from '../hashgraph/hashgraph.service';
 
 @Injectable()
 export class EquitiesService {
   private readonly logger = new Logger(EquitiesService.name);
-  private network: any; // Network SDK instance
+  // network handled by HashgraphService
 
   constructor(
     @InjectModel(Equity.name)
     private readonly equityModel: Model<Equity>,
+    private readonly hashgraph: HashgraphService,
   ) {}
 
   /**
    * Initialize the SDK (this should be called during app startup)
    */
-  async initializeSDK() {
-    try {
-      // Import the SDK dynamically
-      const { Network } = await import('@hashgraph/asset-tokenization-sdk');
-
-      this.network = Network;
-
-      // Initialize with testnet configuration
-      const supportedWallets = await this.network.init({
-        network: 'testnet',
-        mirrorNode: {
-          name: 'Hedera Testnet',
-          baseUrl: 'https://testnet.mirrornode.hedera.com',
-        },
-        rpcNode: {
-          name: 'Hedera Testnet',
-          baseUrl: 'https://testnet.hashio.io/api',
-        },
-        events: {
-          walletInit: () => this.logger.log('Wallet initialized'),
-          walletFound: () => this.logger.log('Wallet found'),
-        },
-        configuration: {
-          factoryAddress: process.env.FACTORY_ADDRESS,
-          resolverAddress: process.env.RESOLVER_ADDRESS 
-        },
-        factories: {
-          factories: [],
-        },
-        resolvers: {
-          resolvers: [],
-        },
-      });
-
-      this.logger.log('Asset Tokenization SDK initialized successfully');
-      return supportedWallets;
-    } catch (error) {
-      this.logger.error(`Failed to initialize SDK: ${error.message}`);
-      throw new InternalServerErrorException(
-        'Failed to initialize Asset Tokenization SDK',
-      );
-    }
-  }
+  // SDK initialization handled by HashgraphService
 
   /**
    * Create a new equity using the SDK
    */
   async create(createEquityDto: CreateEquityDto): Promise<Equity> {
     try {
-      if (!this.network) {
-        await this.initializeSDK();
-      }
-
-      // Import Equity port
-      const { Equity: EquityPort, CreateEquityRequest } = await import(
-        '@hashgraph/asset-tokenization-sdk'
-      );
+      // Ensure SDK initialized and get ports
+      const EquityPort = await this.hashgraph.getEquityPort();
+      const { CreateEquityRequest } = await import('@hashgraph/asset-tokenization-sdk');
 
       const equityRequest = new CreateEquityRequest({
         name: `Equity for ${createEquityDto.companyId}`,
@@ -141,13 +96,8 @@ export class EquitiesService {
    */
   async setDividends(setDividendDto: SetDividendDto): Promise<any> {
     try {
-      if (!this.network) {
-        await this.initializeSDK();
-      }
-
-      const { Equity: EquityPort, SetDividendsRequest } = await import(
-        '@hashgraph/asset-tokenization-sdk'
-      );
+      const EquityPort = await this.hashgraph.getEquityPort();
+      const { SetDividendsRequest } = await import('@hashgraph/asset-tokenization-sdk');
 
       const dividendRequest = new SetDividendsRequest({
         securityId: setDividendDto.securityId,
@@ -187,13 +137,8 @@ export class EquitiesService {
    */
   async setVotingRights(setVotingRightsDto: SetVotingRightsDto): Promise<any> {
     try {
-      if (!this.network) {
-        await this.initializeSDK();
-      }
-
-      const { Equity: EquityPort, SetVotingRightsRequest } = await import(
-        '@hashgraph/asset-tokenization-sdk'
-      );
+      const EquityPort = await this.hashgraph.getEquityPort();
+      const { SetVotingRightsRequest } = await import('@hashgraph/asset-tokenization-sdk');
 
       const votingRequest = new SetVotingRightsRequest({
         securityId: setVotingRightsDto.securityId,
