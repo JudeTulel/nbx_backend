@@ -6,6 +6,7 @@ export class HashgraphService implements OnModuleInit {
   private readonly logger = new Logger(HashgraphService.name);
   private network: any;
   private isInitialized = false;
+  private sdkModule: any = null;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -22,9 +23,8 @@ export class HashgraphService implements OnModuleInit {
     if (this.isInitialized) return;
 
     try {
-      const mod = await import('@hashgraph/asset-tokenization-sdk');
-      const { Network } = mod;
-
+      const sdk = await this.getSdkModule();
+      const { Network } = sdk;
       this.network = Network;
 
       const factoryAddress = this.configService.get<string>('FACTORY_ADDRESS');
@@ -33,6 +33,11 @@ export class HashgraphService implements OnModuleInit {
       const mirrorBase = this.configService.get<string>('HEDERA_MIRROR_NODE') || 'https://testnet.mirrornode.hedera.com';
       const rpcBase = this.configService.get<string>('HEDERA_RPC_NODE') || 'https://testnet.hashio.io/api';
 
+      if (!factoryAddress || !resolverAddress) {
+        throw new Error('FACTORY_ADDRESS and RESOLVER_ADDRESS must be set in environment variables.');
+      }
+
+      // Initialize the SDK using a plain object (matches SDK README)
       await this.network.init({
         network: networkName,
         mirrorNode: {
@@ -48,8 +53,8 @@ export class HashgraphService implements OnModuleInit {
           walletFound: () => this.logger.log('Wallet found'),
         },
         configuration: {
-          factoryAddress: factoryAddress,
-          resolverAddress: resolverAddress,
+          factoryAddress,
+          resolverAddress,
         },
         factories: {
           factories: [],
@@ -80,13 +85,35 @@ export class HashgraphService implements OnModuleInit {
 
   async getEquityPort(): Promise<any> {
     await this.ensureInitialized();
-    const mod = await import('@hashgraph/asset-tokenization-sdk');
-    return mod.Equity;
+    const sdk = await this.getSdkModule();
+    return sdk.Equity;
   }
 
   async getBondPort(): Promise<any> {
     await this.ensureInitialized();
-    const mod = await import('@hashgraph/asset-tokenization-sdk');
-    return mod.Bond;
+    const sdk = await this.getSdkModule();
+    return sdk.Bond;
+  }
+
+  private async getSdkModule() {
+    if (this.sdkModule) {
+      return this.sdkModule;
+    }
+
+    try {
+      // Try loading the package root (respects package.json exports)
+      this.logger.log('Loading Asset Tokenization SDK...');
+      const mod = await import('@hashgraph/asset-tokenization-sdk');
+      this.sdkModule = (mod && (mod.default || mod)) as any;
+      this.logger.log('Asset Tokenization SDK loaded successfully');
+      // Log available exports for debugging
+      try {
+        this.logger.debug(`Available SDK exports: ${Object.keys(this.sdkModule).join(', ')}`);
+      } catch {}
+      return this.sdkModule;
+    } catch (error) {
+      this.logger.error(`Failed to load Asset Tokenization SDK: ${error?.message ?? error}`);
+      throw new Error('Unable to load Asset Tokenization SDK');
+    }
   }
 }

@@ -25,9 +25,7 @@ export class EquitiesService {
     private readonly hashgraph: HashgraphService,
   ) {}
 
-  /**
-   * Initialize the SDK (this should be called during app startup)
-   */
+  
   // SDK initialization handled by HashgraphService
 
   /**
@@ -42,7 +40,7 @@ export class EquitiesService {
       const equityRequest = new CreateEquityRequest({
         name: `Equity for ${createEquityDto.companyId}`,
         symbol: `EQ${createEquityDto.companyId}`,
-        isin: `US${createEquityDto.companyId}EQ`,
+        isin: `KE${createEquityDto.companyId}EQ`,
         decimals: 2,
         isWhiteList: false,
         isControllable: true,

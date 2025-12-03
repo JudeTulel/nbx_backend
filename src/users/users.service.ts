@@ -119,8 +119,8 @@ export class UserService {
    */
   async updateUser(
     useremail: string,
+    currentPassword: string,
     newPassword: string,
-    hederaClient: Client,
   ): Promise<User> {
     try {
       const user = await this.userModel.findOne({ useremail }).select('+passwordHash').exec();
@@ -128,51 +128,56 @@ export class UserService {
         throw new NotFoundException('User not found');
       }
 
+      const isCurrentValid = await bcrypt.compare(
+        currentPassword,
+        user.passwordHash,
+      );
+
+      if (!isCurrentValid) {
+        throw new UnauthorizedException('Invalid current password');
+      }
+
       // Ensure encryptedWallet exists
       if (!user.encryptedWallet) {
         throw new InternalServerErrorException('Invalid wallet configuration');
       }
 
-      // Hash new password
-      const newPasswordHash = await bcrypt.hash(newPassword, 10);
-
-      // Decrypt existing private key with old credentials
       const { encryptedKey, salt, iv } = user.encryptedWallet;
       if (!encryptedKey || !salt || !iv) {
         throw new InternalServerErrorException('Invalid wallet configuration');
       }
 
-      // Re-encrypt the private key with the new password
+      // Decrypt existing private key using current password
+      const derivedCurrentKey = await new Promise<Buffer>((resolve, reject) => {
+        crypto.scrypt(currentPassword, Buffer.from(salt, 'hex'), 32, (err, derivedKey) => {
+          if (err) reject(err);
+          resolve(derivedKey);
+        });
+      });
+
+      const decipher = crypto.createDecipheriv(
+        'aes-256-cbc',
+        derivedCurrentKey,
+        Buffer.from(iv, 'hex'),
+      );
+
+      let decrypted = decipher.update(encryptedKey, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+
+      const hederaPrivateKey = PrivateKey.fromString(decrypted);
+
+      // Hash new password and re-encrypt private key
+      const newPasswordHash = await bcrypt.hash(newPassword, 10);
       const newSalt = crypto.randomBytes(16);
       const newIv = crypto.randomBytes(16);
-      const newKey = await new Promise<Buffer>((resolve, reject) => {
+      const derivedNewKey = await new Promise<Buffer>((resolve, reject) => {
         crypto.scrypt(newPassword, newSalt, 32, (err, derivedKey) => {
           if (err) reject(err);
           resolve(derivedKey);
         });
       });
 
-      // For simplicity, we'll generate a new key pair instead of decrypting/re-encrypting
-      const hederaPrivateKey = PrivateKey.generateECDSA();
-      const hederaPublicKey = hederaPrivateKey.publicKey;
-
-      // Update Hedera account with new key
-      const tx = new AccountCreateTransaction()
-        .setKey(hederaPublicKey)
-        .setInitialBalance(new Hbar(1))
-        .setMaxAutomaticTokenAssociations(10)
-        .freezeWith(hederaClient);
-
-      const operatorKey = PrivateKey.fromStringECDSA(
-        process.env.HEDERA_OPERATOR_KEY || '',
-      );
-      const signedTx = await tx.sign(operatorKey);
-      const response = await signedTx.execute(hederaClient);
-      const receipt = await response.getReceipt(hederaClient);
-      const newAccountId = receipt.accountId!.toString();
-      const newHederaEvmAddress = hederaPublicKey.toEvmAddress();
-
-      const cipher = crypto.createCipheriv('aes-256-cbc', newKey, newIv);
+      const cipher = crypto.createCipheriv('aes-256-cbc', derivedNewKey, newIv);
       let newEncrypted = cipher.update(
         hederaPrivateKey.toString(),
         'utf8',
@@ -180,10 +185,7 @@ export class UserService {
       );
       newEncrypted += cipher.final('hex');
 
-      // Update user document
       user.passwordHash = newPasswordHash;
-      user.hederaAccountId = newAccountId;
-      user.hederaEVMAccount = `0x${newHederaEvmAddress}`;
       user.encryptedWallet = {
         encryptedKey: newEncrypted,
         salt: newSalt.toString('hex'),
