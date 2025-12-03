@@ -12,18 +12,18 @@ import {
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
-import { EquitiesService } from '../equities/equities.service';
-import { BondsService } from '../bonds/bonds.service';
-import { CreateEquityDto } from '../equities/dto/create-equity.dto';
-import { CreateBondDto } from '../bonds/dto/create-bond.dto';
+import { EquityService } from '../equity/equity.service';
+import { BondService } from '../bond/bond.service';
+import { CreateEquityDto } from '../equity/dto/create-equity.dto';
+import { CreateBondDto } from '../bond/dto/create-bond.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('companies')
 export class CompaniesController {
   constructor(
     private readonly companiesService: CompaniesService,
-    private readonly equitiesService: EquitiesService,
-    private readonly bondsService: BondsService,
+    private readonly equityService: EquityService,
+    private readonly bondService: BondService,
   ) {}
 
   /**
@@ -106,11 +106,11 @@ export class CompaniesController {
   }
 
   /**
-   * POST /companies/:id/equities
+   * POST /companies/:id/equity
    * Creates a new equity for a company
    */
   @UseGuards(JwtAuthGuard)
-  @Post(':id/equities')
+  @Post(':id/equity')
   async createEquity(
     @Param('id') companyId: string,
     @Body() createEquityDto: CreateEquityDto,
@@ -118,15 +118,15 @@ export class CompaniesController {
     // Verify company exists
     await this.companiesService.findOne(companyId);
     createEquityDto.companyId = companyId;
-    return await this.equitiesService.create(createEquityDto);
+    return await this.equityService.createEquity(createEquityDto);
   }
 
   /**
-   * POST /companies/:id/bonds
+   * POST /companies/:id/bond
    * Creates a new bond for a company
    */
   @UseGuards(JwtAuthGuard)
-  @Post(':id/bonds')
+  @Post(':id/bond')
   async createBond(
     @Param('id') companyId: string,
     @Body() createBondDto: CreateBondDto,
@@ -134,28 +134,28 @@ export class CompaniesController {
     // Verify company exists
     await this.companiesService.findOne(companyId);
     createBondDto.companyId = companyId;
-    return await this.bondsService.create(createBondDto);
+    return await this.bondService.createBond(createBondDto);
   }
 
   /**
-   * GET /companies/:id/equities
-   * Retrieves all equities for a company
+   * GET /companies/:id/equity
+   * Retrieves all equity for a company
    */
-  @Get(':id/equities')
-  async getCompanyEquities(@Param('id') companyId: string) {
+  @Get(':id/equity')
+  async getCompanyEquity(@Param('id') companyId: string) {
     // Verify company exists
     await this.companiesService.findOne(companyId);
-    return await this.equitiesService.findByCompany(companyId);
+    return await this.equityService.findByCompany(companyId);
   }
 
   /**
-   * GET /companies/:id/bonds
-   * Retrieves all bonds for a company
+   * GET /companies/:id/bond
+   * Retrieves all bond for a company
    */
-  @Get(':id/bonds')
-  async getCompanyBonds(@Param('id') companyId: string) {
+  @Get(':id/bond')
+  async getCompanyBond(@Param('id') companyId: string) {
     // Verify company exists
     await this.companiesService.findOne(companyId);
-    return await this.bondsService.findByCompany(companyId);
+    return await this.bondService.findByCompany(companyId);
   }
 }

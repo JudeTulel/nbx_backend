@@ -6,6 +6,9 @@ export class Company extends Document {
   @Prop({ required: true, unique: true })
   name: string;
 
+  @Prop({ unique: true })
+  companyId?: string;
+
   @Prop ({required:true,unique:true})
   useremail: string; // Refrences user document that operates on behalf of company
 

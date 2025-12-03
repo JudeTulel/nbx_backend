@@ -4,12 +4,15 @@ import { AppService } from './app.service';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UsersModule } from './users/users.module';
-import { EquitiesModule } from './equities/equities.module';
 import { CompaniesModule } from './companies/companies.module';
-import { BondsModule } from './bonds/bonds.module';
+import { BondModule } from './bond/bond.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { AuthModule } from './auth/auth.module';
-import { HashgraphModule } from './hashgraph/hashgraph.module';
+import { HederaModule } from './hedera/hedera.module';
+import { TokenizationModule } from './tokenization/tokenization.module';
+import { EquityModule } from './equity/equity.module';
+import { ComplianceModule } from './compliance/compliance.module';
+import { CorporateActionsModule } from './corporate-actions/corporate-actions.module';
 
 @Module({
   imports: [
@@ -24,12 +27,15 @@ import { HashgraphModule } from './hashgraph/hashgraph.module';
       inject: [ConfigService],
     }),
     UsersModule,
-    EquitiesModule,
     CompaniesModule,
-    BondsModule,
+    BondModule,
     UploadsModule,
     AuthModule,
-    HashgraphModule,
+    HederaModule,
+    TokenizationModule,
+    EquityModule,
+    ComplianceModule,
+    CorporateActionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

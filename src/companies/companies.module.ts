@@ -3,14 +3,14 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { CompaniesService } from './companies.service';
 import { CompaniesController } from './companies.controller';
 import { Company, CompanySchema } from './company.schema';
-import { EquitiesModule } from '../equities/equities.module';
-import { BondsModule } from '../bonds/bonds.module';
+import { EquityModule } from '../equity/equity.module';
+import { BondModule } from '../bond/bond.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Company.name, schema: CompanySchema }]),
-    EquitiesModule,
-    BondsModule,
+    EquityModule,
+    BondModule,
   ],
   providers: [CompaniesService],
   controllers: [CompaniesController],
