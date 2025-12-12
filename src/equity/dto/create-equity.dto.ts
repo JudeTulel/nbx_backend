@@ -25,4 +25,8 @@ export class CreateEquityDto {
   @IsOptional()
   @IsString()
   regulationType?: 'REG_D' | 'REG_S' | 'REG_CF';
+
+  @IsOptional()
+  @IsString()
+  companyAccountId?: string; // Hedera account ID of the company
 }

@@ -9,6 +9,8 @@ import {
   Body,
   UseGuards,
 } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
@@ -17,6 +19,7 @@ import { BondService } from '../bond/bond.service';
 import { CreateEquityDto } from '../equity/dto/create-equity.dto';
 import { CreateBondDto } from '../bond/dto/create-bond.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { User } from '../users/users.schema';
 
 @Controller('companies')
 export class CompaniesController {
@@ -24,6 +27,7 @@ export class CompaniesController {
     private readonly companiesService: CompaniesService,
     private readonly equityService: EquityService,
     private readonly bondService: BondService,
+    @InjectModel(User.name) private userModel: Model<User>,
   ) {}
 
   /**
@@ -115,9 +119,21 @@ export class CompaniesController {
     @Param('id') companyId: string,
     @Body() createEquityDto: CreateEquityDto,
   ) {
-    // Verify company exists
-    await this.companiesService.findOne(companyId);
+    // Verify company exists and get company details
+    const company = await this.companiesService.findOne(companyId);
     createEquityDto.companyId = companyId;
+    
+    // Get the company user's Hedera account ID
+    try {
+      const user = await this.userModel.findOne({ useremail: company.useremail }).exec();
+      if (user && user.hederaAccountId) {
+        createEquityDto.companyAccountId = user.hederaAccountId;
+      }
+    } catch (error) {
+      console.error('Failed to retrieve company user Hedera account:', error);
+      // Continue without company account ID - will use operator account
+    }
+    
     return await this.equityService.createEquity(createEquityDto);
   }
 
@@ -131,9 +147,21 @@ export class CompaniesController {
     @Param('id') companyId: string,
     @Body() createBondDto: CreateBondDto,
   ) {
-    // Verify company exists
-    await this.companiesService.findOne(companyId);
+    // Verify company exists and get company details
+    const company = await this.companiesService.findOne(companyId);
     createBondDto.companyId = companyId;
+    
+    // Get the company user's Hedera account ID
+    try {
+      const user = await this.userModel.findOne({ useremail: company.useremail }).exec();
+      if (user && user.hederaAccountId) {
+        createBondDto.companyAccountId = user.hederaAccountId;
+      }
+    } catch (error) {
+      console.error('Failed to retrieve company user Hedera account:', error);
+      // Continue without company account ID - will use operator account
+    }
+    
     return await this.bondService.createBond(createBondDto);
   }
 
