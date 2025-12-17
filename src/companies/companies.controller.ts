@@ -8,7 +8,12 @@ import {
   Query,
   Body,
   UseGuards,
+  UploadedFiles,
+  UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
@@ -17,6 +22,10 @@ import { BondService } from '../bond/bond.service';
 import { CreateEquityDto } from '../equity/dto/create-equity.dto';
 import { CreateBondDto } from '../bond/dto/create-bond.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
+import { User } from '../users/users.schema';
 
 @Controller('companies')
 export class CompaniesController {
@@ -24,6 +33,7 @@ export class CompaniesController {
     private readonly companiesService: CompaniesService,
     private readonly equityService: EquityService,
     private readonly bondService: BondService,
+    @InjectModel(User.name) private userModel: Model<User>,
   ) {}
 
   /**
@@ -32,7 +42,45 @@ export class CompaniesController {
    */
   @UseGuards(JwtAuthGuard)
   @Post()
-  async create(@Body() createCompanyDto: CreateCompanyDto) {
+  @UseInterceptors(
+    FilesInterceptor('files', 10, {
+      storage: diskStorage({
+        destination: './uploads',
+        filename: (req, file, cb) => {
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          cb(null, `${file.fieldname}-${uniqueSuffix}${extname(file.originalname)}`);
+        },
+      }),
+      fileFilter: (req, file, cb) => {
+        const allowed = ['.pdf', '.jpg', '.jpeg', '.png'];
+        if (allowed.includes(extname(file.originalname).toLowerCase())) {
+          cb(null, true);
+        } else {
+          cb(new BadRequestException('Invalid file type'), false);
+        }
+      },
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  async create(
+    @Body() body: any,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    // Map files by fieldname
+    const fileMap: Record<string, Express.Multer.File[]> = (files || []).reduce((acc, file) => {
+      if (!acc[file.fieldname]) acc[file.fieldname] = [];
+      acc[file.fieldname].push(file);
+      return acc;
+    }, {} as Record<string, Express.Multer.File[]>);
+
+    const createCompanyDto: CreateCompanyDto = {
+      ...body,
+      certificateOfIncorporation: fileMap.certificateOfIncorporation?.[0],
+      cr12: fileMap.cr12?.[0],
+      memArts: fileMap.memArts?.[0],
+      otherDocs: fileMap.otherDocs || [],
+    } as any;
+
     return await this.companiesService.create(createCompanyDto);
   }
 
@@ -115,9 +163,21 @@ export class CompaniesController {
     @Param('id') companyId: string,
     @Body() createEquityDto: CreateEquityDto,
   ) {
-    // Verify company exists
-    await this.companiesService.findOne(companyId);
+    // Verify company exists and get company details
+    const company = await this.companiesService.findOne(companyId);
     createEquityDto.companyId = companyId;
+    
+    // Get the company user's Hedera account ID
+    try {
+      const user = await this.userModel.findOne({ useremail: company.useremail }).exec();
+      if (user && user.hederaAccountId) {
+        createEquityDto.companyAccountId = user.hederaAccountId;
+      }
+    } catch (error) {
+      console.error('Failed to retrieve company user Hedera account:', error);
+      // Continue without company account ID - will use operator account
+    }
+    
     return await this.equityService.createEquity(createEquityDto);
   }
 
@@ -131,9 +191,21 @@ export class CompaniesController {
     @Param('id') companyId: string,
     @Body() createBondDto: CreateBondDto,
   ) {
-    // Verify company exists
-    await this.companiesService.findOne(companyId);
+    // Verify company exists and get company details
+    const company = await this.companiesService.findOne(companyId);
     createBondDto.companyId = companyId;
+    
+    // Get the company user's Hedera account ID
+    try {
+      const user = await this.userModel.findOne({ useremail: company.useremail }).exec();
+      if (user && user.hederaAccountId) {
+        createBondDto.companyAccountId = user.hederaAccountId;
+      }
+    } catch (error) {
+      console.error('Failed to retrieve company user Hedera account:', error);
+      // Continue without company account ID - will use operator account
+    }
+    
     return await this.bondService.createBond(createBondDto);
   }
 

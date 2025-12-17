@@ -5,6 +5,7 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
+import { existsSync, mkdirSync } from 'fs';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Company } from './company.schema';
@@ -25,11 +26,67 @@ export class CompaniesService {
    */
   async create(createCompanyDto: CreateCompanyDto): Promise<Company> {
     try {
-      if (!createCompanyDto.name || !createCompanyDto.symbol || !createCompanyDto.useremail) {
-        throw new BadRequestException('Name and symbol are required');
+      if (!createCompanyDto.name || !createCompanyDto.ticker || !createCompanyDto.useremail) {
+        throw new BadRequestException('Name, ticker, and useremail are required');
       }
 
-      const newCompany = new this.companyModel(createCompanyDto);
+      // Ensure uploads folder exists
+      const uploadDir = './uploads';
+      if (!existsSync(uploadDir)) {
+        mkdirSync(uploadDir, { recursive: true });
+      }
+
+      // Prepare documents array
+      const documents: any[] = [];
+
+      const addDocument = (file: Express.Multer.File | undefined, name: string, type: string) => {
+        if (file) {
+          documents.push({
+            name,
+            type,
+            fileName: file.originalname,
+            path: file.path,
+            size: file.size,
+            mimeType: file.mimetype,
+            uploadedAt: new Date(),
+          });
+        }
+      };
+
+      addDocument(createCompanyDto.certificateOfIncorporation as any, 'Certificate of Incorporation', 'incorporation');
+      addDocument(createCompanyDto.cr12 as any, 'CR12 (Official Search Report)', 'cr12');
+      addDocument(createCompanyDto.memArts as any, 'Memorandum & Articles of Association', 'memarts');
+
+      if (createCompanyDto.otherDocs) {
+        (createCompanyDto.otherDocs as any[]).forEach((file, index) => {
+          addDocument(file, `Additional Document ${index + 1}`, 'other');
+        });
+      }
+
+      // Required documents check
+      const requiredTypes = ['incorporation', 'cr12', 'memarts'];
+      const missing = requiredTypes.filter(type => !documents.some(doc => doc.type === type));
+      if (missing.length > 0) {
+        throw new BadRequestException('Missing required documents');
+      }
+
+      const newCompany = new this.companyModel({
+        name: createCompanyDto.name,
+        useremail: createCompanyDto.useremail,
+        ticker: createCompanyDto.ticker,
+        symbol: createCompanyDto.ticker.toUpperCase(),
+        sector: createCompanyDto.sector,
+        description: createCompanyDto.description,
+        marketCap: createCompanyDto.marketCap,
+        price: createCompanyDto.price || 0,
+        totalSupply: '0',
+        circulatingSupply: '0',
+        documents,
+        highlights: createCompanyDto.highlights || [],
+        team: createCompanyDto.team || [],
+        priceHistory: createCompanyDto.priceHistory || [],
+      });
+
       return await newCompany.save();
     } catch (error: any) {
       if (error.code === 11000) {
