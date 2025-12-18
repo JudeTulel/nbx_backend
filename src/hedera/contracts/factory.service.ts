@@ -19,7 +19,7 @@ export class FactoryContractService {
     private readonly hederaService: HederaService,
     private readonly configService: ConfigService
   ) {
-    const contractId = this.configService.get<string>('FACTORY_CONTRACT_ID');
+    const contractId = this.configService.get<string>('TESTNET_FACTORY_PROXY');
     if (!contractId) {
       throw new Error('FACTORY_CONTRACT_ID is not configured. Please set it in your environment variables.');
     }

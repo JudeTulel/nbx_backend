@@ -22,7 +22,7 @@ import { BondService } from '../bond/bond.service';
 import { CreateEquityDto } from '../equity/dto/create-equity.dto';
 import { CreateBondDto } from '../bond/dto/create-bond.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { User } from '../users/users.schema';

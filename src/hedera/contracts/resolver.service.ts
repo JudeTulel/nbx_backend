@@ -16,7 +16,7 @@ export class ResolverContractService {
     private readonly hederaService: HederaService,
     private readonly configService: ConfigService
   ) {
-    const contractId = this.configService.get<string>('RESOLVER_CONTRACT_ID');
+    const contractId = this.configService.get<string>('TESTNET_BUSINESSLOGICRESOLVER_PROXY');
     if (!contractId) {
       throw new Error('RESOLVER_CONTRACT_ID is not configured. Please set it in your environment variables.');
     }
