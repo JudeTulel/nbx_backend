@@ -1,3 +1,6 @@
+// ============================================
+// UPDATED COMPANIES SERVICE (companies.service.ts)
+// ============================================
 import {
   Injectable,
   NotFoundException,
@@ -5,12 +8,12 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { existsSync, mkdirSync } from 'fs';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Company } from './company.schema';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
+import { UploadsService, UploadCategory } from '../uploads/uploads.service';
 
 @Injectable()
 export class CompaniesService {
@@ -19,57 +22,27 @@ export class CompaniesService {
   constructor(
     @InjectModel(Company.name)
     private readonly companyModel: Model<Company>,
+    private readonly uploadsService: UploadsService,
   ) {}
 
   /**
-   * Creates a new company
+   * Creates a new company with document uploads
    */
   async create(createCompanyDto: CreateCompanyDto): Promise<Company> {
     try {
+      // Validate required fields
       if (!createCompanyDto.name || !createCompanyDto.ticker || !createCompanyDto.useremail) {
         throw new BadRequestException('Name, ticker, and useremail are required');
       }
 
-      // Ensure uploads folder exists
-      const uploadDir = './uploads';
-      if (!existsSync(uploadDir)) {
-        mkdirSync(uploadDir, { recursive: true });
+      // Validate required documents are provided
+      if (!createCompanyDto.certificateOfIncorporation || 
+          !createCompanyDto.cr12 || 
+          !createCompanyDto.memArts) {
+        throw new BadRequestException('All required documents must be provided');
       }
 
-      // Prepare documents array
-      const documents: any[] = [];
-
-      const addDocument = (file: Express.Multer.File | undefined, name: string, type: string) => {
-        if (file) {
-          documents.push({
-            name,
-            type,
-            fileName: file.originalname,
-            path: file.path,
-            size: file.size,
-            mimeType: file.mimetype,
-            uploadedAt: new Date(),
-          });
-        }
-      };
-
-      addDocument(createCompanyDto.certificateOfIncorporation as any, 'Certificate of Incorporation', 'incorporation');
-      addDocument(createCompanyDto.cr12 as any, 'CR12 (Official Search Report)', 'cr12');
-      addDocument(createCompanyDto.memArts as any, 'Memorandum & Articles of Association', 'memarts');
-
-      if (createCompanyDto.otherDocs) {
-        (createCompanyDto.otherDocs as any[]).forEach((file, index) => {
-          addDocument(file, `Additional Document ${index + 1}`, 'other');
-        });
-      }
-
-      // Required documents check
-      const requiredTypes = ['incorporation', 'cr12', 'memarts'];
-      const missing = requiredTypes.filter(type => !documents.some(doc => doc.type === type));
-      if (missing.length > 0) {
-        throw new BadRequestException('Missing required documents');
-      }
-
+      // Create company first to get the ID
       const newCompany = new this.companyModel({
         name: createCompanyDto.name,
         useremail: createCompanyDto.useremail,
@@ -81,13 +54,110 @@ export class CompaniesService {
         price: createCompanyDto.price || 0,
         totalSupply: '0',
         circulatingSupply: '0',
-        documents,
+        documents: [], // Will be populated after upload
         highlights: createCompanyDto.highlights || [],
         team: createCompanyDto.team || [],
         priceHistory: createCompanyDto.priceHistory || [],
       });
 
-      return await newCompany.save();
+      const savedCompany = await newCompany.save();
+
+      // Upload documents using the upload service
+      const documents: any[] = [];
+
+      try {
+        // Upload Certificate of Incorporation
+        const incorpResult = await this.uploadsService.uploadFile(
+          createCompanyDto.certificateOfIncorporation as any,
+          UploadCategory.COMPANY_DOCUMENTS,
+        );
+        documents.push({
+          name: 'Certificate of Incorporation',
+          type: 'incorporation',
+          fileName: incorpResult.fileName,
+          path: incorpResult.filePath,
+          url: incorpResult.publicUrl,
+          size: incorpResult.size,
+          mimeType: incorpResult.mimeType,
+          uploadedAt: incorpResult.uploadedAt,
+        });
+
+        // Upload CR12
+        const cr12Result = await this.uploadsService.uploadFile(
+          createCompanyDto.cr12 as any,
+          UploadCategory.COMPANY_DOCUMENTS,
+        );
+        documents.push({
+          name: 'CR12 (Official Search Report)',
+          type: 'cr12',
+          fileName: cr12Result.fileName,
+          path: cr12Result.filePath,
+          url: cr12Result.publicUrl,
+          size: cr12Result.size,
+          mimeType: cr12Result.mimeType,
+          uploadedAt: cr12Result.uploadedAt,
+        });
+
+        // Upload Memorandum & Articles
+        const memArtsResult = await this.uploadsService.uploadFile(
+          createCompanyDto.memArts as any,
+          UploadCategory.COMPANY_DOCUMENTS,
+        );
+        documents.push({
+          name: 'Memorandum & Articles of Association',
+          type: 'memarts',
+          fileName: memArtsResult.fileName,
+          path: memArtsResult.filePath,
+          url: memArtsResult.publicUrl,
+          size: memArtsResult.size,
+          mimeType: memArtsResult.mimeType,
+          uploadedAt: memArtsResult.uploadedAt,
+        });
+
+        // Upload other documents if provided
+        if (createCompanyDto.otherDocs && Array.isArray(createCompanyDto.otherDocs)) {
+          for (let i = 0; i < createCompanyDto.otherDocs.length; i++) {
+            const file = createCompanyDto.otherDocs[i];
+            const result = await this.uploadsService.uploadFile(
+              file as any,
+              UploadCategory.COMPANY_DOCUMENTS,
+            );
+            documents.push({
+              name: `Additional Document ${i + 1}`,
+              type: 'other',
+              fileName: result.fileName,
+              path: result.filePath,
+              url: result.publicUrl,
+              size: result.size,
+              mimeType: result.mimeType,
+              uploadedAt: result.uploadedAt,
+            });
+          }
+        }
+
+        // Update company with documents
+        savedCompany.documents = documents;
+        await savedCompany.save();
+
+        this.logger.log(`Company created successfully: ${savedCompany.name} (ID: ${savedCompany._id})`);
+
+        return savedCompany;
+      } catch (uploadError: any) {
+        // If upload fails, delete the company and cleanup any uploaded files
+        this.logger.error(`Upload failed, cleaning up company: ${uploadError.message}`);
+        await this.companyModel.findByIdAndDelete(savedCompany._id).exec();
+        
+        // Cleanup any successfully uploaded documents
+        for (const doc of documents) {
+          try {
+            await this.uploadsService.deleteFile(doc.path);
+          } catch (cleanupError) {
+            this.logger.warn(`Failed to cleanup file: ${doc.path}`);
+          }
+        }
+        
+        throw new InternalServerErrorException('Failed to upload company documents');
+      }
     } catch (error: any) {
       if (error.code === 11000) {
         const field = Object.keys(error.keyPattern)[0];
@@ -95,6 +165,12 @@ export class CompaniesService {
           `Company with this ${field} already exists`,
         );
       }
+      
+      if (error instanceof BadRequestException || 
+          error instanceof InternalServerErrorException) {
+        throw error;
+      }
+      
       this.logger.error(`Failed to create company: ${error.message}`);
       throw new InternalServerErrorException('Failed to create company');
     }
@@ -158,6 +234,22 @@ export class CompaniesService {
   }
 
   /**
+   * Retrieves companies by user email
+   */
+  async findByUserEmail(useremail: string): Promise<Company[]> {
+    try {
+      const companies = await this.companyModel
+        .find({ useremail })
+        .sort({ createdAt: -1 })
+        .exec();
+      return companies;
+    } catch (error: any) {
+      this.logger.error(`Failed to find companies by user: ${error.message}`);
+      throw new InternalServerErrorException('Failed to retrieve user companies');
+    }
+  }
+
+  /**
    * Updates a company by ID
    */
   async update(
@@ -172,6 +264,9 @@ export class CompaniesService {
       if (!company) {
         throw new NotFoundException(`Company with ID ${id} not found`);
       }
+      
+      this.logger.log(`Company updated successfully: ${company.name} (ID: ${id})`);
+      
       return company;
     } catch (error: any) {
       if (error instanceof NotFoundException) throw error;
@@ -187,14 +282,118 @@ export class CompaniesService {
   }
 
   /**
-   * Deletes a company by ID
+   * Add a document to an existing company
+   */
+  async addDocument(
+    companyId: string,
+    file: Express.Multer.File,
+    documentType: string,
+    documentName?: string,
+  ): Promise<Company> {
+    try {
+      const company = await this.companyModel.findById(companyId).exec();
+      if (!company) {
+        throw new NotFoundException(`Company with ID ${companyId} not found`);
+      }
+
+      // Upload the file
+      const uploadResult = await this.uploadsService.uploadFile(
+        file,
+        UploadCategory.COMPANY_DOCUMENTS,
+      );
+
+      // Add document to company
+      const documentEntry = {
+        name: documentName || file.originalname,
+        type: documentType,
+        fileName: uploadResult.fileName,
+        path: uploadResult.filePath,
+        url: uploadResult.publicUrl,
+        size: uploadResult.size,
+        mimeType: uploadResult.mimeType,
+        uploadedAt: uploadResult.uploadedAt,
+      };
+
+      company.documents.push(documentEntry);
+      await company.save();
+
+      this.logger.log(`Document added to company ${companyId}: ${documentName || file.originalname}`);
+
+      return company;
+    } catch (error: any) {
+      if (error instanceof NotFoundException) throw error;
+      this.logger.error(`Failed to add document: ${error.message}`);
+      throw new InternalServerErrorException('Failed to add document to company');
+    }
+  }
+
+  /**
+   * Remove a document from a company
+   */
+  async removeDocument(companyId: string, documentId: string): Promise<Company> {
+    try {
+      const company = await this.companyModel.findById(companyId).exec();
+      if (!company) {
+        throw new NotFoundException(`Company with ID ${companyId} not found`);
+      }
+
+      const documentIndex = company.documents.findIndex(
+        (doc: any) => doc._id.toString() === documentId,
+      );
+
+      if (documentIndex === -1) {
+        throw new NotFoundException('Document not found');
+      }
+
+      const document = company.documents[documentIndex];
+
+      // Delete file from disk using upload service
+      try {
+        await this.uploadsService.deleteFile(document.path!);
+      } catch (deleteError) {
+        this.logger.warn(`Failed to delete file from disk: ${document.path}`);
+      }
+
+      // Remove from database
+      company.documents.splice(documentIndex, 1);
+      await company.save();
+
+      this.logger.log(`Document removed from company ${companyId}: ${document.name}`);
+
+      return company;
+    } catch (error: any) {
+      if (error instanceof NotFoundException) throw error;
+      this.logger.error(`Failed to remove document: ${error.message}`);
+      throw new InternalServerErrorException('Failed to remove document');
+    }
+  }
+
+  /**
+   * Deletes a company by ID (includes cleanup of all documents)
    */
   async remove(id: string): Promise<{ message: string }> {
     try {
-      const company = await this.companyModel.findByIdAndDelete(id).exec();
+      const company = await this.companyModel.findById(id).exec();
       if (!company) {
         throw new NotFoundException(`Company with ID ${id} not found`);
       }
+
+      // Delete all company documents from disk
+      if (company.documents && company.documents.length > 0) {
+        for (const doc of company.documents) {
+          try {
+            await this.uploadsService.deleteFile(doc.path!);
+          } catch (deleteError) {
+            this.logger.warn(`Failed to delete file: ${doc.path}`);
+          }
+        }
+      }
+
+      // Delete company from database
+      await this.companyModel.findByIdAndDelete(id).exec();
+
+      this.logger.log(`Company deleted successfully: ${company.name} (ID: ${id})`);
+
       return { message: `Company ${company.name} deleted successfully` };
     } catch (error: any) {
       if (error instanceof NotFoundException) throw error;
@@ -217,11 +416,53 @@ export class CompaniesService {
       }
 
       company.priceHistory.push(priceEntry);
-      return await company.save();
+      await company.save();
+
+      this.logger.log(`Price history updated for company ${id}: ${priceEntry.price} on ${priceEntry.date}`);
+
+      return company;
     } catch (error: any) {
       if (error instanceof NotFoundException) throw error;
       this.logger.error(`Failed to update price history: ${error.message}`);
       throw new InternalServerErrorException('Failed to update price history');
     }
   }
+
+  /**
+   * Get company statistics
+   */
+  async getCompanyStats(): Promise<any> {
+    try {
+      const [total, bySector, recentCompanies] = await Promise.all([
+        this.companyModel.countDocuments().exec(),
+        this.companyModel.aggregate([
+          {
+            $group: {
+              _id: '$sector',
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+        this.companyModel
+          .find()
+          .sort({ createdAt: -1 })
+          .limit(5)
+          .select('name ticker sector createdAt')
+          .exec(),
+      ]);
+
+      return {
+        total,
+        bySector: bySector.reduce((acc: any, item: any) => {
+          acc[item._id] = item.count;
+          return acc;
+        }, {}),
+        recentCompanies,
+      };
+    } catch (error: any) {
+      this.logger.error(`Failed to get company stats: ${error.message}`);
+      throw new InternalServerErrorException('Failed to retrieve company statistics');
+    }
+  }
 }
+

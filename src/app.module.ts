@@ -5,14 +5,16 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UsersModule } from './users/users.module';
 import { CompaniesModule } from './companies/companies.module';
-import { BondModule } from './bond/bond.module';
+// import { BondModule } from './bond/bond.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { AuthModule } from './auth/auth.module';
-import { HederaModule } from './hedera/hedera.module';
-import { TokenizationModule } from './tokenization/tokenization.module';
-import { EquityModule } from './equity/equity.module';
-import { ComplianceModule } from './compliance/compliance.module';
-import { CorporateActionsModule } from './corporate-actions/corporate-actions.module';
+// import { HederaModule } from './hedera/hedera.module';
+// import { TokenizationModule } from './tokenization/tokenization.module';
+// import { EquityModule } from './equity/equity.module';
+// import { ComplianceModule } from './compliance/compliance.module';
+// import { CorporateActionsModule } from './corporate-actions/corporate-actions.module';
+import { KYCModule } from './kyc/kyc.module';
+import { OnrampModule } from './onramp/onramp.module';
 
 @Module({
   imports: [
@@ -28,14 +30,16 @@ import { CorporateActionsModule } from './corporate-actions/corporate-actions.mo
     }),
     UsersModule,
     CompaniesModule,
-    BondModule,
+    // BondModule,
     UploadsModule,
     AuthModule,
-    HederaModule,
-    TokenizationModule,
-    EquityModule,
-    ComplianceModule,
-    CorporateActionsModule,
+    KYCModule,
+    OnrampModule,
+    // HederaModule,
+    // TokenizationModule,
+    // EquityModule,
+    // ComplianceModule,
+    // CorporateActionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

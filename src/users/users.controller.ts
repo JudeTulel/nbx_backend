@@ -3,105 +3,176 @@ import {
   Post,
   Get,
   Put,
+  Delete,
   Body,
   Param,
-  HttpException,
+  HttpCode,
   HttpStatus,
-  Res,
   UseGuards,
 } from '@nestjs/common';
-import type { Response } from 'express';
 import { UserService } from './users.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { UpdatePasswordDto } from './dto/update-password.dto';
+
+// DTO for user registration
+export class CreateUserDto {
+  useremail: string;
+  password: string;
+  hederaAccountId: string;
+  role?: string;
+}
+
+// DTO for login
+export class LoginDto {
+  useremail: string;
+  password: string;
+}
+
+// DTO for password update
+export class UpdatePasswordDto {
+  currentPassword: string;
+  newPassword: string;
+}
+
+// DTO for role update
+export class UpdateRoleDto {
+  newRole: string;
+}
 
 @Controller('users')
 export class UserController {
-  constructor(private userService: UserService) {}
+  constructor(private readonly userService: UserService) {}
 
-  // The original POST /users (create user) and POST /users/login are now handled by the AuthModule.
+  /**
+   * Register a new user
+   */
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  async register(@Body() createUserDto: CreateUserDto) {
+    const { useremail, password, hederaAccountId, role = 'investor' } = createUserDto;
+    
+    const user = await this.userService.createUser(
+      useremail,
+      password,
+      hederaAccountId,
+      role,
+    );
 
-  @UseGuards(JwtAuthGuard)
-  @Get(':useremail')
-  async getUser(@Param('useremail') useremail: string) {
-    try {
-      const user = await this.userService.findOne(useremail);
-      if (!user) {
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
-      }
-      return {
+    // Return user without sensitive data
+    return {
+      message: 'User registered successfully',
+      user: {
+        id: user._id,
         useremail: user.useremail,
+        role: user.role,
         hederaAccountId: user.hederaAccountId,
-        hederaEVMAccount: user.hederaEVMAccount,
-      };
-    } catch (error) {
-      throw new HttpException(
-        error.message || 'Error retrieving user',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
+        createdAt: user.createdAt,
+      },
+    };
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Put(':useremail')
-  async updateUser(
-    @Param('useremail') useremail: string,
-    @Body() updateUserDto: UpdatePasswordDto,
-  ) {
-    try {
-      if (!updateUserDto.currentPassword) {
-        throw new HttpException(
-          'Current password is required',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
+  /**
+   * Login user
+   */
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async login(@Body() loginDto: LoginDto) {
+    const { useremail, password } = loginDto;
+    
+    const user = await this.userService.login(useremail, password);
 
-      if (!updateUserDto.newPassword || updateUserDto.newPassword.length < 8) {
-        throw new HttpException(
-          'Password must be at least 8 characters long',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-
-      const user = await this.userService.updateUser(
-        useremail,
-        updateUserDto.currentPassword,
-        updateUserDto.newPassword,
-      );
-
-      return {
+    // Return user without sensitive data
+    return {
+      message: 'Login successful',
+      user: {
+        id: user._id,
         useremail: user.useremail,
+        role: user.role,
         hederaAccountId: user.hederaAccountId,
-        hederaEVMAccount: user.hederaEVMAccount,
-      };
-    } catch (error) {
-      throw new HttpException(
-        error.message || 'Error updating user',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
+        lastLogin: user.lastLogin,
+      },
+    };
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Post(':useremail/sign-transaction')
-  async signTransaction(
+  /**
+   * Get user profile
+   */
+  @Get('profile/:useremail')
+  async getProfile(@Param('useremail') useremail: string) {
+    const user = await this.userService.getUserProfile(useremail);
+    return {
+      user,
+    };
+  }
+
+  /**
+   * Get user by Hedera account ID
+   */
+  @Get('hedera/:accountId')
+  async getByHederaAccount(@Param('accountId') accountId: string) {
+    const user = await this.userService.findByHederaAccount(accountId);
+    return {
+      user: {
+        id: user._id,
+        useremail: user.useremail,
+        role: user.role,
+        hederaAccountId: user.hederaAccountId,
+      },
+    };
+  }
+
+  /**
+   * Update user password
+   */
+  @Put('password/:useremail')
+  @HttpCode(HttpStatus.OK)
+  async updatePassword(
     @Param('useremail') useremail: string,
-    @Body() body: { transaction: string; password: string },
-    @Res({ passthrough: true }) res: Response,
+    @Body() updatePasswordDto: UpdatePasswordDto,
   ) {
-    try {
-      const receipt = await this.userService.signTransaction(
-        useremail,
-        body.transaction,
-        body.password,
-      );
-      return {
-        message: 'Transaction signed successfully',
-        receipt,
-      };
-    } catch (error) {
-      res.status(400);
-      return { message: (error as Error).message };
-    }
+    const { currentPassword, newPassword } = updatePasswordDto;
+    
+    await this.userService.updatePassword(
+      useremail,
+      currentPassword,
+      newPassword,
+    );
+
+    return {
+      message: 'Password updated successfully',
+    };
+  }
+
+  /**
+   * Update user role
+   */
+  @Put('role/:useremail')
+  @HttpCode(HttpStatus.OK)
+  async updateRole(
+    @Param('useremail') useremail: string,
+    @Body() updateRoleDto: UpdateRoleDto,
+  ) {
+    const { newRole } = updateRoleDto;
+    
+    const user = await this.userService.updateUserRole(useremail, newRole);
+
+    return {
+      message: 'Role updated successfully',
+      user: {
+        id: user._id,
+        useremail: user.useremail,
+        role: user.role,
+      },
+    };
+  }
+
+  /**
+   * Delete user
+   */
+  @Delete(':useremail')
+  @HttpCode(HttpStatus.OK)
+  async deleteUser(@Param('useremail') useremail: string) {
+    await this.userService.deleteUser(useremail);
+    return {
+      message: 'User deleted successfully',
+    };
   }
 }

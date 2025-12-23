@@ -1,95 +1,121 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
-@Schema({ timestamps: true })
-export class Company extends Document {
-  @Prop({ required: true, unique: true })
+// Document subdocument schema
+@Schema({ _id: true, timestamps: false })
+export class CompanyDocument {
+  @Prop({ required: true })
   name: string;
 
-  @Prop({ unique: true })
-  companyId?: string;
+  @Prop({ required: true })
+  type: string;
 
-  @Prop ({required:true,unique:true})
-  useremail: string; // Refrences user document that operates on behalf of company
+  @Prop({ required: true })
+  fileName: string;
 
-  @Prop({ required: true, unique: true })
-  symbol: string;
+  @Prop({ required: true })
+  path: string;
+
+  @Prop({ required: true })
+  url: string;
+
+  @Prop({ required: true })
+  size: number;
+
+  @Prop({ required: true })
+  mimeType: string;
+
+  @Prop({ type: Date, default: Date.now })
+  uploadedAt: Date;
+}
+
+export const CompanyDocumentSchema = SchemaFactory.createForClass(CompanyDocument);
+
+// Team member subdocument schema
+@Schema({ _id: true, timestamps: false })
+export class TeamMember {
+  @Prop({ required: true })
+  name: string;
+
+  @Prop({ required: true })
+  role: string;
+
+  @Prop()
+  bio?: string;
+
+  @Prop()
+  image?: string;
+}
+
+export const TeamMemberSchema = SchemaFactory.createForClass(TeamMember);
+
+// Price history subdocument schema
+@Schema({ _id: false, timestamps: false })
+export class PriceHistory {
+  @Prop({ required: true })
+  date: string;
+
+  @Prop({ required: true })
+  price: number;
+}
+
+export const PriceHistorySchema = SchemaFactory.createForClass(PriceHistory);
+
+// Main Company schema
+@Schema({ timestamps: true })
+export class Company extends Document {
+  @Prop({ required: true })
+  name: string;
+
+  @Prop({ required: true })
+  useremail: string;
 
   @Prop({ required: true, unique: true })
   ticker: string;
 
+  @Prop({ required: true, unique: true })
+  symbol: string;
+
   @Prop({ required: true })
   sector: string;
-
-  @Prop({ required: true,default: 0 })
-  price: number;
-
-  @Prop({ required: true, default: 0 })
-  change: number;
-
-  @Prop({ required: true })
-  marketCap: string;
-
-  @Prop({ required: true , default: 0 })
-  volume: string;
-
-  @Prop({ required: true, default: 0  })
-  totalSupply: string;
-
-  @Prop({ required: true , default: 0 })
-  circulatingSupply: string;
 
   @Prop({ required: true })
   description: string;
 
+  @Prop({ required: true })
+  marketCap: string;
+
+  @Prop({ type: Number, default: 0 })
+  price: number;
+
+  @Prop({ default: '0' })
+  totalSupply: string;
+
+  @Prop({ default: '0' })
+  circulatingSupply: string;
+
+  // Documents array - properly typed as subdocuments
+  @Prop({ type: [CompanyDocumentSchema], default: [] })
+  documents: CompanyDocument[];
+
   @Prop({ type: [String], default: [] })
   highlights: string[];
 
-  @Prop({
-    type: [
-      {
-        name: String,
-        position: String,
-      },
-    ],
-    default: [],
-  })
-  team: Array<{ name: string; position: string }>;
+  @Prop({ type: [TeamMemberSchema], default: [] })
+  team: TeamMember[];
 
-  @Prop({
-    type: [
-      {
-        name: String,
-        type: String,
-        fileName: String,
-        path: String,
-        size: Number,
-        mimeType: String,
-        uploadedAt: Date,
-      },
-    ],
-    default: [],
-  })
-  documents: Array<{
-    name: string;
-    type: string;
-    fileName?: string;
-    path?: string;
-    size?: number;
-    mimeType?: string;
-    uploadedAt?: Date;
-  }>;
+  @Prop({ type: [PriceHistorySchema], default: [] })
+  priceHistory: PriceHistory[];
 
-  @Prop({
-    type: [
-      {
-        date: String,
-        price: Number,
-      },
-    ],
-    default: [],
-  })
-  priceHistory: Array<{ date: string; price: number }>;
+  // Hedera-related fields (optional)
+  @Prop()
+  tokenId?: string;
+
+  @Prop()
+  treasuryAccountId?: string;
+
+  @Prop({ default: false })
+  isTokenized: boolean;
 }
 
 export const CompanySchema = SchemaFactory.createForClass(Company);

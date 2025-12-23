@@ -1,36 +1,45 @@
-// user.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, HydratedDocument, Schema as MongooseSchema } from 'mongoose';
-import { EncryptedWallet } from './encrypted-wallet.schema'; // Import the new class
+import { Document } from 'mongoose';
 
-export type UserDocument = HydratedDocument<User>;
-
-@Schema()
-export class User {
-  // @Prop({ required: true, unique: true, auto: true })
-  // _id: string;
-
-
-  @Prop({ required: true, unique: true })
+@Schema({ timestamps: true })
+export class User extends Document {
+  @Prop({ required: true, unique: true, lowercase: true, trim: true })
   useremail: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, select: false })
   passwordHash: string;
 
-  @Prop({ required: true, default: 'investor' })
+  @Prop({ 
+    required: true, 
+    enum: ['investor', 'company', 'auditor', 'admin'],
+    default: 'investor' 
+  })
   role: string;
 
-  @Prop()
+  @Prop({ required: true, unique: true })
   hederaAccountId: string;
 
-  @Prop()
-  hederaEVMAccount: string;
+  @Prop({ default: true })
+  isActive: boolean;
 
-  @Prop({
-    type: MongooseSchema.Types.Mixed, // Use mixed type for dynamic content
-    default: undefined,
-  })
-  encryptedWallet?: EncryptedWallet; // Use optional property
+  @Prop()
+  lastLogin?: Date;
+
+  @Prop({ type: Date })
+  createdAt?: Date;
+
+  @Prop({ type: Date })
+  updatedAt?: Date;
+
+   @Prop({ default: null })
+  kycStatus: string; // 'pending' | 'approved' | 'rejected' | null
+
+  @Prop()
+  kycSubmittedAt?: Date;
+
+  @Prop()
+  kycApprovedAt?: Date;
+
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

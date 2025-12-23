@@ -12,76 +12,76 @@ import {
   UseInterceptors,
   BadRequestException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
-import { EquityService } from '../equity/equity.service';
-import { BondService } from '../bond/bond.service';
-import { CreateEquityDto } from '../equity/dto/create-equity.dto';
-import { CreateBondDto } from '../bond/dto/create-bond.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { FilesInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
-import { User } from '../users/users.schema';
 
 @Controller('companies')
 export class CompaniesController {
   constructor(
     private readonly companiesService: CompaniesService,
-    private readonly equityService: EquityService,
-    private readonly bondService: BondService,
-    @InjectModel(User.name) private userModel: Model<User>,
   ) {}
 
   /**
    * POST /companies
-   * Creates a new company
+   * Creates a new company with document uploads
    */
   @UseGuards(JwtAuthGuard)
   @Post()
   @UseInterceptors(
-    FilesInterceptor('files', 10, {
-      storage: diskStorage({
-        destination: './uploads',
-        filename: (req, file, cb) => {
-          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-          cb(null, `${file.fieldname}-${uniqueSuffix}${extname(file.originalname)}`);
-        },
-      }),
+    FileFieldsInterceptor([
+      { name: 'certificateOfIncorporation', maxCount: 1 },
+      { name: 'cr12', maxCount: 1 },
+      { name: 'memArts', maxCount: 1 },
+      { name: 'otherDocs', maxCount: 10 },
+    ], {
       fileFilter: (req, file, cb) => {
-        const allowed = ['.pdf', '.jpg', '.jpeg', '.png'];
-        if (allowed.includes(extname(file.originalname).toLowerCase())) {
+        const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png'];
+        const fileExtension = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
+        
+        if (allowedExtensions.includes(fileExtension)) {
           cb(null, true);
         } else {
-          cb(new BadRequestException('Invalid file type'), false);
+          cb(new BadRequestException(`Invalid file type: ${fileExtension}. Allowed types: ${allowedExtensions.join(', ')}`), false);
         }
       },
-      limits: { fileSize: 10 * 1024 * 1024 },
+      limits: { 
+        fileSize: 10 * 1024 * 1024, // 10MB per file
+      },
     }),
   )
   async create(
-    @Body() body: any,
-    @UploadedFiles() files: Express.Multer.File[],
+    @Body() body: CreateCompanyDto,
+    @UploadedFiles() files: {
+      certificateOfIncorporation?: Express.Multer.File[];
+      cr12?: Express.Multer.File[];
+      memArts?: Express.Multer.File[];
+      otherDocs?: Express.Multer.File[];
+    },
   ) {
-    // Map files by fieldname
-    const fileMap: Record<string, Express.Multer.File[]> = (files || []).reduce((acc, file) => {
-      if (!acc[file.fieldname]) acc[file.fieldname] = [];
-      acc[file.fieldname].push(file);
-      return acc;
-    }, {} as Record<string, Express.Multer.File[]>);
+    // Validate required files
+    if (!files.certificateOfIncorporation || !files.cr12 || !files.memArts) {
+      throw new BadRequestException('All required documents must be uploaded (Certificate of Incorporation, CR12, Memorandum & Articles)');
+    }
 
+    // Attach files to DTO
     const createCompanyDto: CreateCompanyDto = {
       ...body,
-      certificateOfIncorporation: fileMap.certificateOfIncorporation?.[0],
-      cr12: fileMap.cr12?.[0],
-      memArts: fileMap.memArts?.[0],
-      otherDocs: fileMap.otherDocs || [],
+      certificateOfIncorporation: files.certificateOfIncorporation[0],
+      cr12: files.cr12[0],
+      memArts: files.memArts[0],
+      otherDocs: files.otherDocs || [],
     } as any;
 
-    return await this.companiesService.create(createCompanyDto);
+    const company = await this.companiesService.create(createCompanyDto);
+
+    return {
+      success: true,
+      message: 'Company created successfully',
+      data: company,
+    };
   }
 
   /**
@@ -94,9 +94,45 @@ export class CompaniesController {
     @Query('limit') limit?: string,
     @Query('sector') sector?: string,
   ) {
-    const skipNum = skip ? Number.parseInt(skip) : 0;
-    const limitNum = limit ? Number.parseInt(limit) : 10;
-    return await this.companiesService.findAll(skipNum, limitNum, sector);
+    const skipNum = skip ? parseInt(skip) : 0;
+    const limitNum = limit ? parseInt(limit) : 10;
+    
+    const result = await this.companiesService.findAll(skipNum, limitNum, sector);
+    
+    return {
+      success: true,
+      count: result.companies.length,
+      total: result.total,
+      data: result.companies,
+    };
+  }
+
+  /**
+   * GET /companies/stats
+   * Get company statistics
+   */
+  @Get('stats')
+  async getStats() {
+    const stats = await this.companiesService.getCompanyStats();
+    return {
+      success: true,
+      data: stats,
+    };
+  }
+
+  /**
+   * GET /companies/user/:email
+   * Get companies by user email
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('user/:email')
+  async findByUser(@Param('email') email: string) {
+    const companies = await this.companiesService.findByUserEmail(email);
+    return {
+      success: true,
+      count: companies.length,
+      data: companies,
+    };
   }
 
   /**
@@ -105,7 +141,11 @@ export class CompaniesController {
    */
   @Get('symbol/:symbol')
   async findBySymbol(@Param('symbol') symbol: string) {
-    return await this.companiesService.findBySymbol(symbol);
+    const company = await this.companiesService.findBySymbol(symbol);
+    return {
+      success: true,
+      data: company,
+    };
   }
 
   /**
@@ -114,7 +154,11 @@ export class CompaniesController {
    */
   @Get(':id')
   async findOne(@Param('id') id: string) {
-    return await this.companiesService.findOne(id);
+    const company = await this.companiesService.findOne(id);
+    return {
+      success: true,
+      data: company,
+    };
   }
 
   /**
@@ -127,7 +171,12 @@ export class CompaniesController {
     @Param('id') id: string,
     @Body() updateCompanyDto: UpdateCompanyDto,
   ) {
-    return await this.companiesService.update(id, updateCompanyDto);
+    const company = await this.companiesService.update(id, updateCompanyDto);
+    return {
+      success: true,
+      message: 'Company updated successfully',
+      data: company,
+    };
   }
 
   /**
@@ -137,97 +186,77 @@ export class CompaniesController {
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
   async remove(@Param('id') id: string) {
-    return await this.companiesService.remove(id);
+    const result = await this.companiesService.remove(id);
+    return {
+      success: true,
+      ...result,
+    };
   }
 
   /**
-   * PATCH /companies/:id/price-history
+   * POST /companies/:id/price-history
    * Updates price history for a company
    */
   @UseGuards(JwtAuthGuard)
-  @Patch(':id/price-history')
+  @Post(':id/price-history')
   async updatePriceHistory(
     @Param('id') id: string,
     @Body() priceEntry: { date: string; price: number },
   ) {
-    return await this.companiesService.updatePriceHistory(id, priceEntry);
+    const company = await this.companiesService.updatePriceHistory(id, priceEntry);
+    return {
+      success: true,
+      message: 'Price history updated successfully',
+      data: company,
+    };
   }
 
   /**
-   * POST /companies/:id/equity
-   * Creates a new equity for a company
+   * POST /companies/:id/documents
+   * Add document to existing company
    */
   @UseGuards(JwtAuthGuard)
-  @Post(':id/equity')
-  async createEquity(
-    @Param('id') companyId: string,
-    @Body() createEquityDto: CreateEquityDto,
+  @Post(':id/documents')
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'file', maxCount: 1 }]))
+  async addDocument(
+    @Param('id') id: string,
+    @Body('documentType') documentType: string,
+    @Body('documentName') documentName: string,
+    @UploadedFiles() files: { file?: Express.Multer.File[] },
   ) {
-    // Verify company exists and get company details
-    const company = await this.companiesService.findOne(companyId);
-    createEquityDto.companyId = companyId;
-    
-    // Get the company user's Hedera account ID
-    try {
-      const user = await this.userModel.findOne({ useremail: company.useremail }).exec();
-      if (user && user.hederaAccountId) {
-        createEquityDto.companyAccountId = user.hederaAccountId;
-      }
-    } catch (error) {
-      console.error('Failed to retrieve company user Hedera account:', error);
-      // Continue without company account ID - will use operator account
+    if (!files.file || !files.file[0]) {
+      throw new BadRequestException('File is required');
     }
-    
-    return await this.equityService.createEquity(createEquityDto);
+
+    const company = await this.companiesService.addDocument(
+      id,
+      files.file[0],
+      documentType,
+      documentName,
+    );
+
+    return {
+      success: true,
+      message: 'Document added successfully',
+      data: company,
+    };
   }
 
   /**
-   * POST /companies/:id/bond
-   * Creates a new bond for a company
+   * DELETE /companies/:id/documents/:documentId
+   * Remove document from company
    */
   @UseGuards(JwtAuthGuard)
-  @Post(':id/bond')
-  async createBond(
-    @Param('id') companyId: string,
-    @Body() createBondDto: CreateBondDto,
+  @Delete(':id/documents/:documentId')
+  async removeDocument(
+    @Param('id') id: string,
+    @Param('documentId') documentId: string,
   ) {
-    // Verify company exists and get company details
-    const company = await this.companiesService.findOne(companyId);
-    createBondDto.companyId = companyId;
-    
-    // Get the company user's Hedera account ID
-    try {
-      const user = await this.userModel.findOne({ useremail: company.useremail }).exec();
-      if (user && user.hederaAccountId) {
-        createBondDto.companyAccountId = user.hederaAccountId;
-      }
-    } catch (error) {
-      console.error('Failed to retrieve company user Hedera account:', error);
-      // Continue without company account ID - will use operator account
-    }
-    
-    return await this.bondService.createBond(createBondDto);
-  }
-
-  /**
-   * GET /companies/:id/equity
-   * Retrieves all equity for a company
-   */
-  @Get(':id/equity')
-  async getCompanyEquity(@Param('id') companyId: string) {
-    // Verify company exists
-    await this.companiesService.findOne(companyId);
-    return await this.equityService.findByCompany(companyId);
-  }
-
-  /**
-   * GET /companies/:id/bond
-   * Retrieves all bond for a company
-   */
-  @Get(':id/bond')
-  async getCompanyBond(@Param('id') companyId: string) {
-    // Verify company exists
-    await this.companiesService.findOne(companyId);
-    return await this.bondService.findByCompany(companyId);
+    const company = await this.companiesService.removeDocument(id, documentId);
+    return {
+      success: true,
+      message: 'Document removed successfully',
+      data: company,
+    };
   }
 }

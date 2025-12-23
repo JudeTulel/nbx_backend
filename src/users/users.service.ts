@@ -4,20 +4,12 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User } from './users.schema';
 import * as bcrypt from 'bcryptjs';
-import * as crypto from 'crypto';
-import {
-  Client,
-  PrivateKey,
-  AccountCreateTransaction,
-  AccountId,
-  Transaction,
-  Hbar,
-} from '@hashgraph/sdk';
 
 @Injectable()
 export class UserService {
@@ -26,80 +18,62 @@ export class UserService {
   constructor(@InjectModel(User.name) private userModel: Model<User>) {}
 
   /**
-   * Creates a new user with a corresponding Hedera account.
+   * Creates a new user with their Hedera account ID from wallet.
    */
   async createUser(
-    
     useremail: string,
     password: string,
-    hederaClient: Client,
-    role: string = 'user',
+    hederaAccountId: string,
+    role: string = 'investor',
+    isKYC: boolean = false
   ): Promise<User> {
     try {
-      if (!useremail || !password) {
-        throw new Error('useremail and password are required.');
+      // Validate inputs
+      if (!useremail || !password || !hederaAccountId) {
+        throw new BadRequestException('Email, password, and Hedera account ID are required.');
       }
 
+      // Validate Hedera account ID format (e.g., 0.0.12345)
+      const accountIdPattern = /^\d+\.\d+\.\d+$/;
+      if (!accountIdPattern.test(hederaAccountId)) {
+        throw new BadRequestException('Invalid Hedera account ID format.');
+      }
+
+      // Check if user already exists
+      const existingUser = await this.userModel.findOne({ useremail }).exec();
+      if (existingUser) {
+        throw new BadRequestException('User with this email already exists.');
+      }
+
+      // Check if Hedera account is already registered
+      const existingAccount = await this.userModel.findOne({ hederaAccountId }).exec();
+      if (existingAccount) {
+        throw new BadRequestException('This Hedera account is already registered.');
+      }
+
+      // Hash password
       const passwordHash = await bcrypt.hash(password, 10);
-
-      // Create Hedera account
-      const hederaPrivateKey = PrivateKey.generateECDSA();
-      const hederaPublicKey = hederaPrivateKey.publicKey;
-
-      const tx = new AccountCreateTransaction()
-        .setKey(hederaPublicKey)
-        .setInitialBalance(new Hbar(10))
-        .setMaxAutomaticTokenAssociations(10)
-        .freezeWith(hederaClient);
-
-      // Use the operator key from the client passed in from controller
-      const operatorKey = PrivateKey.fromStringECDSA(
-        process.env.HEDERA_OPERATOR_KEY || '',
-      );
-      const signedTx = await tx.sign(operatorKey);
-      const response = await signedTx.execute(hederaClient);
-      const receipt = await response.getReceipt(hederaClient);
-      const accountId = receipt.accountId!.toString();
-      const hederaEvmAddress = hederaPublicKey.toEvmAddress();
-
-      // Encrypt the Hedera private key
-      const salt = crypto.randomBytes(16);
-      const iv = crypto.randomBytes(16);
-
-      const key = await new Promise<Buffer>((resolve, reject) => {
-        crypto.scrypt(password, salt, 32, (err, derivedKey) => {
-          if (err) reject(err);
-          resolve(derivedKey);
-        });
-      });
-
-      const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
-      let encrypted = cipher.update(hederaPrivateKey.toString(), 'utf8', 'hex');
-      encrypted += cipher.final('hex');
 
       // Create and save the user in MongoDB
       const newUser = new this.userModel({
         useremail,
         passwordHash,
         role,
-        hederaAccountId: accountId,
-        hederaEVMAccount: `0x${hederaEvmAddress}`,
-        encryptedWallet: {
-          encryptedKey: encrypted,
-          salt: salt.toString('hex'),
-          iv: iv.toString('hex'),
-        },
+        hederaAccountId,
       });
 
       return await newUser.save();
     } catch (error) {
       this.logger.error(`Failed to create user: ${error.message}`);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       throw new InternalServerErrorException('Failed to create user account.');
     }
   }
 
   /**
-   * Finds a user by useremail.
+   * Finds a user by email.
    */
   async findOne(useremail: string): Promise<User> {
     try {
@@ -110,14 +84,36 @@ export class UserService {
       return user;
     } catch (error) {
       this.logger.error(`Failed to find user ${useremail}: ${error.message}`);
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
       throw new InternalServerErrorException('Failed to retrieve user');
     }
   }
 
   /**
-   * Updates a user's password and re-encrypts their Hedera private key.
+   * Finds a user by Hedera account ID.
    */
-  async updateUser(
+  async findByHederaAccount(hederaAccountId: string): Promise<User> {
+    try {
+      const user = await this.userModel.findOne({ hederaAccountId }).exec();
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+      return user;
+    } catch (error) {
+      this.logger.error(`Failed to find user by Hedera account: ${error.message}`);
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to retrieve user');
+    }
+  }
+
+  /**
+   * Updates a user's password.
+   */
+  async updatePassword(
     useremail: string,
     currentPassword: string,
     newPassword: string,
@@ -128,6 +124,7 @@ export class UserService {
         throw new NotFoundException('User not found');
       }
 
+      // Verify current password
       const isCurrentValid = await bcrypt.compare(
         currentPassword,
         user.passwordHash,
@@ -137,65 +134,22 @@ export class UserService {
         throw new UnauthorizedException('Invalid current password');
       }
 
-      // Ensure encryptedWallet exists
-      if (!user.encryptedWallet) {
-        throw new InternalServerErrorException('Invalid wallet configuration');
+      // Validate new password
+      if (newPassword.length < 6) {
+        throw new BadRequestException('Password must be at least 6 characters');
       }
 
-      const { encryptedKey, salt, iv } = user.encryptedWallet;
-      if (!encryptedKey || !salt || !iv) {
-        throw new InternalServerErrorException('Invalid wallet configuration');
-      }
-
-      // Decrypt existing private key using current password
-      const derivedCurrentKey = await new Promise<Buffer>((resolve, reject) => {
-        crypto.scrypt(currentPassword, Buffer.from(salt, 'hex'), 32, (err, derivedKey) => {
-          if (err) reject(err);
-          resolve(derivedKey);
-        });
-      });
-
-      const decipher = crypto.createDecipheriv(
-        'aes-256-cbc',
-        derivedCurrentKey,
-        Buffer.from(iv, 'hex'),
-      );
-
-      let decrypted = decipher.update(encryptedKey, 'hex', 'utf8');
-      decrypted += decipher.final('utf8');
-
-      const hederaPrivateKey = PrivateKey.fromString(decrypted);
-
-      // Hash new password and re-encrypt private key
+      // Hash and update new password
       const newPasswordHash = await bcrypt.hash(newPassword, 10);
-      const newSalt = crypto.randomBytes(16);
-      const newIv = crypto.randomBytes(16);
-      const derivedNewKey = await new Promise<Buffer>((resolve, reject) => {
-        crypto.scrypt(newPassword, newSalt, 32, (err, derivedKey) => {
-          if (err) reject(err);
-          resolve(derivedKey);
-        });
-      });
-
-      const cipher = crypto.createCipheriv('aes-256-cbc', derivedNewKey, newIv);
-      let newEncrypted = cipher.update(
-        hederaPrivateKey.toString(),
-        'utf8',
-        'hex',
-      );
-      newEncrypted += cipher.final('hex');
-
       user.passwordHash = newPasswordHash;
-      user.encryptedWallet = {
-        encryptedKey: newEncrypted,
-        salt: newSalt.toString('hex'),
-        iv: newIv.toString('hex'),
-      };
 
       return await user.save();
     } catch (error) {
-      this.logger.error(`Failed to update user ${useremail}: ${error.message}`);
-      throw new InternalServerErrorException('Failed to update user account');
+      this.logger.error(`Failed to update password for user ${useremail}: ${error.message}`);
+      if (error instanceof NotFoundException || error instanceof UnauthorizedException || error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to update password');
     }
   }
 
@@ -204,9 +158,15 @@ export class UserService {
    */
   async updateUserRole(useremail: string, newRole: string): Promise<User> {
     try {
-      const user = await this.userModel.findOne({ useremail }).select('+passwordHash').exec();
+      const user = await this.userModel.findOne({ useremail }).exec();
       if (!user) {
         throw new NotFoundException('User not found');
+      }
+
+      // Validate role
+      const validRoles = ['investor', 'company', 'auditor', 'admin'];
+      if (!validRoles.includes(newRole)) {
+        throw new BadRequestException('Invalid role');
       }
 
       user.role = newRole;
@@ -215,6 +175,9 @@ export class UserService {
       this.logger.error(
         `Failed to update role for user ${useremail}: ${error.message}`,
       );
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
       throw new InternalServerErrorException('Failed to update user role');
     }
   }
@@ -223,79 +186,66 @@ export class UserService {
    * Logs a user in by verifying their credentials.
    */
   async login(useremail: string, password: string): Promise<User> {
-    const user = await this.userModel.findOne({ useremail }).select('+passwordHash').exec();
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
+    try {
+      const user = await this.userModel.findOne({ useremail }).select('+passwordHash').exec();
+      if (!user) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
 
-    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
-    if (!isValidPassword) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
+      const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+      if (!isValidPassword) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
 
-    return user;
+      return user;
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      this.logger.error(`Login failed for user ${useremail}: ${error.message}`);
+      throw new InternalServerErrorException('Login failed');
+    }
   }
 
   /**
-   * Signs a Hedera transaction with the user's private key.
+   * Gets user profile information (excludes sensitive data).
    */
-  async signTransaction(
-    useremail: string,
-    transaction: string,
-    password: string,
-  ): Promise<any> {
-    const user = await this.userModel.findOne({ useremail }).select('+passwordHash').exec();
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    const encryptedWallet = user.encryptedWallet;
-    if (!encryptedWallet || !encryptedWallet.encryptedKey) {
-      throw new UnauthorizedException('No encrypted wallet found for user');
-    }
-    const { encryptedKey, salt, iv } = encryptedWallet;
-
+  async getUserProfile(useremail: string): Promise<Partial<User>> {
     try {
-      const key = await new Promise<Buffer>((resolve, reject) => {
-        crypto.scrypt(
-          password,
-          Buffer.from(salt, 'hex'),
-          32,
-          (err, derivedKey) => {
-            if (err) reject(err);
-            resolve(derivedKey);
-          },
-        );
-      });
+      const user = await this.userModel
+        .findOne({ useremail })
+        .select('-passwordHash -__v')
+        .exec();
+      
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
 
-      const decipher = crypto.createDecipheriv(
-        'aes-256-cbc',
-        key,
-        Buffer.from(iv, 'hex'),
-      );
-      let decrypted = decipher.update(encryptedKey, 'hex', 'utf8');
-      decrypted += decipher.final('utf8');
-
-      const hederaPrivateKey = PrivateKey.fromString(decrypted);
-
-      const hederaClient = Client.forTestnet().setOperator(
-        user.hederaAccountId,
-        hederaPrivateKey,
-      );
-      const transactionObj = Transaction.fromBytes(
-        Buffer.from(transaction, 'base64'),
-      );
-
-      const signedTx = await transactionObj.sign(hederaPrivateKey);
-      const response = await signedTx.execute(hederaClient);
-      const receipt = await response.getReceipt(hederaClient);
-
-      return receipt;
+      return user;
     } catch (error) {
-      this.logger.error(
-        `Failed to sign transaction for user ${useremail}: ${error.message}`,
-      );
-      throw new InternalServerErrorException('Failed to process transaction');
+      this.logger.error(`Failed to get profile for user ${useremail}: ${error.message}`);
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to retrieve user profile');
+    }
+  }
+
+  /**
+   * Deletes a user account.
+   */
+  async deleteUser(useremail: string): Promise<void> {
+    try {
+      const result = await this.userModel.deleteOne({ useremail }).exec();
+      if (result.deletedCount === 0) {
+        throw new NotFoundException('User not found');
+      }
+    } catch (error) {
+      this.logger.error(`Failed to delete user ${useremail}: ${error.message}`);
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to delete user');
     }
   }
 }

@@ -1,9 +1,23 @@
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsEmail,
+  IsOptional,
+  IsNumber,
+  IsArray,
+  ValidateNested,
+  Min,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateCompanyDto {
   @IsString()
   @IsNotEmpty()
   name: string;
+
+  @IsEmail()
+  @IsNotEmpty()
+  useremail: string;
 
   @IsString()
   @IsNotEmpty()
@@ -21,27 +35,26 @@ export class CreateCompanyDto {
   @IsNotEmpty()
   marketCap: string;
 
-  @IsString()
+  @IsNumber()
   @IsOptional()
-  price?: string;
+  @Min(0)
+  price?: number;
 
-  @IsString()
-  @IsNotEmpty()
-  useremail: string;
-
-  // Files will be attached via Express.Multer.File (handled in controller)
-  certificateOfIncorporation?: Express.Multer.File;
-  cr12?: Express.Multer.File;
-  memArts?: Express.Multer.File;
-  otherDocs?: Express.Multer.File[];
-
-  // Optional fields for completeness
   @IsOptional()
+  @IsArray()
   highlights?: string[];
 
   @IsOptional()
-  team?: Array<{ name: string; position: string }>;
+  @IsArray()
+  team?: any[];
 
   @IsOptional()
-  priceHistory?: Array<{ date: string; price: number }>;
+  @IsArray()
+  priceHistory?: any[];
+
+  // File properties (populated by controller)
+  certificateOfIncorporation?: any;
+  cr12?: any;
+  memArts?: any;
+  otherDocs?: any[];
 }

@@ -1,19 +1,19 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { MulterModule } from '@nestjs/platform-express';
-import { UploadsService } from './uploads.service';
 import { UploadsController } from './uploads.controller';
+import { UploadsService } from './uploads.service';
 import { Company, CompanySchema } from '../companies/company.schema';
+import { KYC, KYCSchema } from '../kyc/kyc.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Company.name, schema: CompanySchema }]),
-    MulterModule.register({
-      dest: './uploads',
-    }),
+    MongooseModule.forFeature([
+      { name: Company.name, schema: CompanySchema },
+      { name: KYC.name, schema: KYCSchema },
+    ]),
   ],
-  providers: [UploadsService],
   controllers: [UploadsController],
-  exports: [UploadsService],
+  providers: [UploadsService],
+  exports: [UploadsService], // Export to use in other modules
 })
 export class UploadsModule {}
