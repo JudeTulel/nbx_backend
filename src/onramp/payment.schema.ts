@@ -40,6 +40,11 @@ export class Payment {
 
   @Prop({ default: Date.now })
   createdAt: Date;
+  @Prop({ default: Date.now })
+  completedAt?: Date;
+
+  @Prop({ default: Date.now })
+  failedAt?: Date;
 
   @Prop()
   updatedAt?: Date;

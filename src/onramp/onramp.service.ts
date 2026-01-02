@@ -19,10 +19,10 @@ export class OnrampService {
   ) {
     this.orionApiUrl = this.configService.get<string>('ORION_API_URL') || 
       'https://test.api.orionramp.com';
-    this.orionApiKey = this.configService.get<string>('ORION_API_KEY') || '';
+    this.orionApiKey = this.configService.get<string>('ORION_PRIVATE_KEY') || '';
     
     if (!this.orionApiKey) {
-      this.logger.warn('ORION_API_KEY not configured. Onramp functionality will be limited.');
+      this.logger.warn('ORION_PRIVATE_KEY not configured. Onramp functionality will be limited.');
     }
   }
 
@@ -312,7 +312,7 @@ export class OnrampService {
           lastSuccessfulPayment: lastSuccessfulPayment ? {
             amount: lastSuccessfulPayment.amount,
             currency: lastSuccessfulPayment.currency,
-            date: lastSuccessfulPayment.createdAt,
+            date: lastSuccessfulPayment.completedAt,
           } : null,
         }
       };
@@ -338,6 +338,104 @@ export class OnrampService {
       this.logger.error(`[ONRAMP] Error verifying payment: ${error?.message}`);
       return false;
     }
+  }
+
+  /**
+   * Handle webhook from Orion Ramp
+   * This is called when payment status changes
+   */
+  async handleWebhook(payload: any) {
+    try {
+      this.logger.log(`[ONRAMP] Webhook received: ${JSON.stringify(payload)}`);
+
+      // Validate webhook payload
+      if (!payload || typeof payload !== 'object') {
+        throw new BadRequestException('Invalid webhook payload');
+      }
+
+      const { reference, status, orderID } = payload;
+
+      if (!reference) {
+        this.logger.error('[ONRAMP] Webhook missing reference field');
+        throw new BadRequestException('Invalid webhook payload: missing reference');
+      }
+
+      // Find payment record
+      const payment = await this.paymentModel.findOne({ reference });
+
+      if (!payment) {
+        this.logger.warn(`[ONRAMP] Payment not found for reference: ${reference}`);
+        throw new BadRequestException('Payment not found');
+      }
+
+      // Store old status for logging
+      const oldStatus = payment.status;
+
+      // Update payment status
+      payment.status = this.normalizeStatus(status);
+      payment.webhookData = payload;
+      payment.updatedAt = new Date();
+
+      // Set completion/failure timestamps
+      if (payment.status === 'SUCCESS' && oldStatus !== 'SUCCESS') {
+        payment.completedAt = new Date();
+        this.logger.log(`[ONRAMP] Payment completed: ${reference}`);
+      } else if (payment.status === 'FAILED' && oldStatus !== 'FAILED') {
+        payment.failedAt = new Date();
+        this.logger.log(`[ONRAMP] Payment failed: ${reference}`);
+      }
+
+      await payment.save();
+      this.logger.log(`[ONRAMP] Payment status updated: ${reference} - ${oldStatus} -> ${payment.status}`);
+
+      return {
+        success: true,
+        message: 'Webhook processed successfully',
+        reference,
+        status: payment.status,
+        previousStatus: oldStatus,
+      };
+    } catch (error: any) {
+      this.logger.error(`[ONRAMP] Error handling webhook: ${error?.message}`);
+      this.logger.error(`[ONRAMP] Stack: ${error?.stack}`);
+      
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      
+      throw new InternalServerErrorException('Failed to process webhook');
+    }
+  }
+
+  /**
+   * Normalize status from webhook to standard format
+   */
+  private normalizeStatus(status: string): string {
+    if (!status) return 'PENDING';
+    
+    const upperStatus = status.toUpperCase();
+    
+    // Success variants
+    if (upperStatus === 'SUCCESS' || upperStatus === 'SUCCESSFUL' || 
+        upperStatus === 'COMPLETED' || upperStatus === 'COMPLETE') {
+      return 'SUCCESS';
+    }
+    
+    // Failed variants
+    if (upperStatus === 'FAILED' || upperStatus === 'FAILURE' || 
+        upperStatus === 'DECLINED' || upperStatus === 'REJECTED') {
+      return 'FAILED';
+    }
+    
+    // Pending variants
+    if (upperStatus === 'PENDING' || upperStatus === 'PROCESSING' || 
+        upperStatus === 'INITIATED') {
+      return 'PENDING';
+    }
+    
+    // Return as-is if unknown (will be stored for debugging)
+    this.logger.warn(`[ONRAMP] Unknown status received: ${status}`);
+    return upperStatus;
   }
 
   /**
