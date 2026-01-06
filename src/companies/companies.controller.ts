@@ -22,7 +22,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class CompaniesController {
   constructor(
     private readonly companiesService: CompaniesService,
-  ) {}
+  ) { }
 
   /**
    * POST /companies
@@ -40,14 +40,14 @@ export class CompaniesController {
       fileFilter: (req, file, cb) => {
         const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png'];
         const fileExtension = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
-        
+
         if (allowedExtensions.includes(fileExtension)) {
           cb(null, true);
         } else {
           cb(new BadRequestException(`Invalid file type: ${fileExtension}. Allowed types: ${allowedExtensions.join(', ')}`), false);
         }
       },
-      limits: { 
+      limits: {
         fileSize: 10 * 1024 * 1024, // 10MB per file
       },
     }),
@@ -96,9 +96,9 @@ export class CompaniesController {
   ) {
     const skipNum = skip ? parseInt(skip) : 0;
     const limitNum = limit ? parseInt(limit) : 10;
-    
+
     const result = await this.companiesService.findAll(skipNum, limitNum, sector);
-    
+
     return {
       success: true,
       count: result.companies.length,
@@ -257,6 +257,110 @@ export class CompaniesController {
       success: true,
       message: 'Document removed successfully',
       data: company,
+    };
+  }
+
+  // ============================================
+  // EQUITY ROUTES
+  // ============================================
+
+  /**
+   * POST /companies/:id/equity
+   * Create a new equity token for a company
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/equity')
+  async createEquity(
+    @Param('id') id: string,
+    @Body() createEquityDto: any,
+  ) {
+    const equity = await this.companiesService.createEquity(id, createEquityDto);
+    return {
+      success: true,
+      message: 'Equity created successfully',
+      data: equity,
+    };
+  }
+
+  /**
+   * GET /companies/:id/equity
+   * Get all equities for a company
+   */
+  @Get(':id/equity')
+  async findEquities(@Param('id') id: string) {
+    const equities = await this.companiesService.findEquitiesByCompany(id);
+    return {
+      success: true,
+      count: equities.length,
+      data: equities,
+    };
+  }
+
+  /**
+   * GET /companies/:id/equity/:equityId
+   * Get a single equity by ID
+   */
+  @Get(':id/equity/:equityId')
+  async findEquity(
+    @Param('id') id: string,
+    @Param('equityId') equityId: string,
+  ) {
+    const equity = await this.companiesService.findEquityById(equityId);
+    return {
+      success: true,
+      data: equity,
+    };
+  }
+
+  // ============================================
+  // BOND ROUTES
+  // ============================================
+
+  /**
+   * POST /companies/:id/bond
+   * Create a new bond token for a company
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/bond')
+  async createBond(
+    @Param('id') id: string,
+    @Body() createBondDto: any,
+  ) {
+    const bond = await this.companiesService.createBond(id, createBondDto);
+    return {
+      success: true,
+      message: 'Bond created successfully',
+      data: bond,
+    };
+  }
+
+  /**
+   * GET /companies/:id/bond
+   * Get all bonds for a company
+   */
+  @Get(':id/bond')
+  async findBonds(@Param('id') id: string) {
+    const bonds = await this.companiesService.findBondsByCompany(id);
+    return {
+      success: true,
+      count: bonds.length,
+      data: bonds,
+    };
+  }
+
+  /**
+   * GET /companies/:id/bond/:bondId
+   * Get a single bond by ID
+   */
+  @Get(':id/bond/:bondId')
+  async findBond(
+    @Param('id') id: string,
+    @Param('bondId') bondId: string,
+  ) {
+    const bond = await this.companiesService.findBondById(bondId);
+    return {
+      success: true,
+      data: bond,
     };
   }
 }

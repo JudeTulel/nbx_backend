@@ -9,10 +9,14 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Company } from './company.schema';
+import { Equity } from './equity.schema';
+import { Bond } from './bond.schema';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
+import { CreateEquityDto } from './dto/create-equity.dto';
+import { CreateBondDto } from './dto/create-bond.dto';
 import { UploadsService, UploadCategory } from '../uploads/uploads.service';
 
 @Injectable()
@@ -22,8 +26,12 @@ export class CompaniesService {
   constructor(
     @InjectModel(Company.name)
     private readonly companyModel: Model<Company>,
+    @InjectModel(Equity.name)
+    private readonly equityModel: Model<Equity>,
+    @InjectModel(Bond.name)
+    private readonly bondModel: Model<Bond>,
     private readonly uploadsService: UploadsService,
-  ) {}
+  ) { }
 
   /**
    * Creates a new company with document uploads
@@ -36,9 +44,9 @@ export class CompaniesService {
       }
 
       // Validate required documents are provided
-      if (!createCompanyDto.certificateOfIncorporation || 
-          !createCompanyDto.cr12 || 
-          !createCompanyDto.memArts) {
+      if (!createCompanyDto.certificateOfIncorporation ||
+        !createCompanyDto.cr12 ||
+        !createCompanyDto.memArts) {
         throw new BadRequestException('All required documents must be provided');
       }
 
@@ -146,7 +154,7 @@ export class CompaniesService {
         // If upload fails, delete the company and cleanup any uploaded files
         this.logger.error(`Upload failed, cleaning up company: ${uploadError.message}`);
         await this.companyModel.findByIdAndDelete(savedCompany._id).exec();
-        
+
         // Cleanup any successfully uploaded documents
         for (const doc of documents) {
           try {
@@ -155,7 +163,7 @@ export class CompaniesService {
             this.logger.warn(`Failed to cleanup file: ${doc.path}`);
           }
         }
-        
+
         throw new InternalServerErrorException('Failed to upload company documents');
       }
     } catch (error: any) {
@@ -165,12 +173,12 @@ export class CompaniesService {
           `Company with this ${field} already exists`,
         );
       }
-      
-      if (error instanceof BadRequestException || 
-          error instanceof InternalServerErrorException) {
+
+      if (error instanceof BadRequestException ||
+        error instanceof InternalServerErrorException) {
         throw error;
       }
-      
+
       this.logger.error(`Failed to create company: ${error.message}`);
       throw new InternalServerErrorException('Failed to create company');
     }
@@ -264,9 +272,9 @@ export class CompaniesService {
       if (!company) {
         throw new NotFoundException(`Company with ID ${id} not found`);
       }
-      
+
       this.logger.log(`Company updated successfully: ${company.name} (ID: ${id})`);
-      
+
       return company;
     } catch (error: any) {
       if (error instanceof NotFoundException) throw error;
@@ -464,5 +472,144 @@ export class CompaniesService {
       throw new InternalServerErrorException('Failed to retrieve company statistics');
     }
   }
-}
 
+  // ============================================
+  // EQUITY METHODS
+  // ============================================
+
+  /**
+   * Create an equity token for a company
+   */
+  async createEquity(companyId: string, createEquityDto: CreateEquityDto): Promise<Equity> {
+    try {
+      // Verify company exists
+      const company = await this.companyModel.findById(companyId).exec();
+      if (!company) {
+        throw new NotFoundException(`Company with ID ${companyId} not found`);
+      }
+
+      // Create equity record
+      const equity = new this.equityModel({
+        ...createEquityDto,
+        companyId: new Types.ObjectId(companyId),
+        tokenizedAt: createEquityDto.tokenizedAt ? new Date(createEquityDto.tokenizedAt) : new Date(),
+      });
+
+      const savedEquity = await equity.save();
+
+      // Update company tokenization status
+      await this.companyModel.findByIdAndUpdate(companyId, {
+        isTokenized: true,
+        tokenId: createEquityDto.assetAddress,
+      });
+
+      this.logger.log(`Equity created for company ${companyId}: ${savedEquity.name} (${savedEquity.assetAddress})`);
+
+      return savedEquity;
+    } catch (error: any) {
+      if (error instanceof NotFoundException) throw error;
+      this.logger.error(`Failed to create equity: ${error.message}`);
+      throw new InternalServerErrorException('Failed to create equity');
+    }
+  }
+
+  /**
+   * Get all equities for a company
+   */
+  async findEquitiesByCompany(companyId: string): Promise<Equity[]> {
+    try {
+      const equities = await this.equityModel
+        .find({ companyId: new Types.ObjectId(companyId) })
+        .sort({ createdAt: -1 })
+        .exec();
+      return equities;
+    } catch (error: any) {
+      this.logger.error(`Failed to find equities: ${error.message}`);
+      throw new InternalServerErrorException('Failed to retrieve equities');
+    }
+  }
+
+  /**
+   * Get a single equity by ID
+   */
+  async findEquityById(equityId: string): Promise<Equity> {
+    try {
+      const equity = await this.equityModel.findById(equityId).exec();
+      if (!equity) {
+        throw new NotFoundException(`Equity with ID ${equityId} not found`);
+      }
+      return equity;
+    } catch (error: any) {
+      if (error instanceof NotFoundException) throw error;
+      this.logger.error(`Failed to find equity: ${error.message}`);
+      throw new InternalServerErrorException('Failed to retrieve equity');
+    }
+  }
+
+  // ============================================
+  // BOND METHODS
+  // ============================================
+
+  /**
+   * Create a bond token for a company
+   */
+  async createBond(companyId: string, createBondDto: CreateBondDto): Promise<Bond> {
+    try {
+      // Verify company exists
+      const company = await this.companyModel.findById(companyId).exec();
+      if (!company) {
+        throw new NotFoundException(`Company with ID ${companyId} not found`);
+      }
+
+      // Create bond record
+      const bond = new this.bondModel({
+        ...createBondDto,
+        companyId: new Types.ObjectId(companyId),
+        tokenizedAt: createBondDto.tokenizedAt ? new Date(createBondDto.tokenizedAt) : new Date(),
+      });
+
+      const savedBond = await bond.save();
+
+      this.logger.log(`Bond created for company ${companyId}: ${savedBond.name} (${savedBond.assetAddress})`);
+
+      return savedBond;
+    } catch (error: any) {
+      if (error instanceof NotFoundException) throw error;
+      this.logger.error(`Failed to create bond: ${error.message}`);
+      throw new InternalServerErrorException('Failed to create bond');
+    }
+  }
+
+  /**
+   * Get all bonds for a company
+   */
+  async findBondsByCompany(companyId: string): Promise<Bond[]> {
+    try {
+      const bonds = await this.bondModel
+        .find({ companyId: new Types.ObjectId(companyId) })
+        .sort({ createdAt: -1 })
+        .exec();
+      return bonds;
+    } catch (error: any) {
+      this.logger.error(`Failed to find bonds: ${error.message}`);
+      throw new InternalServerErrorException('Failed to retrieve bonds');
+    }
+  }
+
+  /**
+   * Get a single bond by ID
+   */
+  async findBondById(bondId: string): Promise<Bond> {
+    try {
+      const bond = await this.bondModel.findById(bondId).exec();
+      if (!bond) {
+        throw new NotFoundException(`Bond with ID ${bondId} not found`);
+      }
+      return bond;
+    } catch (error: any) {
+      if (error instanceof NotFoundException) throw error;
+      this.logger.error(`Failed to find bond: ${error.message}`);
+      throw new InternalServerErrorException('Failed to retrieve bond');
+    }
+  }
+}
