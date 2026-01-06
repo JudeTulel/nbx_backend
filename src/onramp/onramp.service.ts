@@ -17,10 +17,10 @@ export class OnrampService {
     private readonly configService: ConfigService,
     private readonly userService: UserService,
   ) {
-    this.orionApiUrl = this.configService.get<string>('ORION_API_URL') || 
+    this.orionApiUrl = this.configService.get<string>('ORION_API_URL') ||
       'https://test.api.orionramp.com';
     this.orionApiKey = this.configService.get<string>('ORION_PRIVATE_KEY') || '';
-    
+
     if (!this.orionApiKey) {
       this.logger.warn('ORION_PRIVATE_KEY not configured. Onramp functionality will be limited.');
     }
@@ -150,11 +150,11 @@ export class OnrampService {
     } catch (error: any) {
       this.logger.error(`[ONRAMP] Error initializing payment: ${error?.message}`);
       this.logger.error(`[ONRAMP] Stack: ${error?.stack}`);
-      
+
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
         throw error;
       }
-      
+
       throw new InternalServerErrorException('Failed to initialize payment. Please try again later.');
     }
   }
@@ -165,7 +165,7 @@ export class OnrampService {
   async getUserPayments(email: string, limit = 50, skip = 0) {
     try {
       this.logger.log(`[ONRAMP] Getting payments for user: ${email}`);
-      
+
       const payments = await this.paymentModel
         .find({ email })
         .sort({ createdAt: -1 })
@@ -196,12 +196,12 @@ export class OnrampService {
   async getPaymentByReference(reference: string, userEmail?: string) {
     try {
       this.logger.log(`[ONRAMP] Getting payment by reference: ${reference}`);
-      
+
       const payment = await this.paymentModel
         .findOne({ reference })
         .select('-__v -webhookData')
         .lean();
-      
+
       if (!payment) {
         throw new BadRequestException('Payment not found');
       }
@@ -217,11 +217,11 @@ export class OnrampService {
       };
     } catch (error: any) {
       this.logger.error(`[ONRAMP] Error getting payment: ${error?.message}`);
-      
+
       if (error instanceof BadRequestException) {
         throw error;
       }
-      
+
       throw new InternalServerErrorException('Failed to retrieve payment');
     }
   }
@@ -232,12 +232,12 @@ export class OnrampService {
   async getPaymentByOrderId(orderID: string, userEmail?: string) {
     try {
       this.logger.log(`[ONRAMP] Getting payment by orderID: ${orderID}`);
-      
+
       const payment = await this.paymentModel
         .findOne({ orderID })
         .select('-__v -webhookData')
         .lean();
-      
+
       if (!payment) {
         throw new BadRequestException('Payment not found');
       }
@@ -253,11 +253,11 @@ export class OnrampService {
       };
     } catch (error: any) {
       this.logger.error(`[ONRAMP] Error getting payment: ${error?.message}`);
-      
+
       if (error instanceof BadRequestException) {
         throw error;
       }
-      
+
       throw new InternalServerErrorException('Failed to retrieve payment');
     }
   }
@@ -285,7 +285,7 @@ export class OnrampService {
       // Get recent payments (last 7 days)
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      
+
       const recentPayments = await this.paymentModel.countDocuments({
         email,
         createdAt: { $gte: sevenDaysAgo }
@@ -344,7 +344,7 @@ export class OnrampService {
    * Handle webhook from Orion Ramp
    * This is called when payment status changes
    */
-  async handleWebhook(payload: any) {
+  async handleWebhook(payload: any, signature?: string) {
     try {
       this.logger.log(`[ONRAMP] Webhook received: ${JSON.stringify(payload)}`);
 
@@ -353,58 +353,111 @@ export class OnrampService {
         throw new BadRequestException('Invalid webhook payload');
       }
 
-      const { reference, status, orderID } = payload;
+      // Validate signature if webhook secret is configured
+      const webhookSecret = this.configService.get<string>('ORION_WEBHOOK_SECRET');
+      if (webhookSecret && signature) {
+        const crypto = require('crypto');
+        const expectedSignature = crypto
+          .createHmac('sha512', webhookSecret)
+          .update(JSON.stringify(payload))
+          .digest('hex');
 
-      if (!reference) {
-        this.logger.error('[ONRAMP] Webhook missing reference field');
-        throw new BadRequestException('Invalid webhook payload: missing reference');
+        if (signature !== expectedSignature) {
+          this.logger.warn('[ONRAMP] Invalid webhook signature');
+          throw new BadRequestException('Invalid webhook signature');
+        }
+        this.logger.log('[ONRAMP] Webhook signature validated successfully');
+      } else if (webhookSecret && !signature) {
+        this.logger.warn('[ONRAMP] Webhook received without signature');
       }
 
-      // Find payment record
-      const payment = await this.paymentModel.findOne({ reference });
+      // Extract fields from Orion webhook format
+      const { event_type, order_id, token, amount, currency, failureReason } = payload;
+
+      if (!order_id && !payload.orderID) {
+        this.logger.error('[ONRAMP] Webhook missing order_id/orderID field');
+        throw new BadRequestException('Invalid webhook payload: missing order_id');
+      }
+
+      const orderID = order_id || payload.orderID;
+
+      // Find payment record by orderID
+      const payment = await this.paymentModel.findOne({ orderID });
 
       if (!payment) {
-        this.logger.warn(`[ONRAMP] Payment not found for reference: ${reference}`);
+        this.logger.warn(`[ONRAMP] Payment not found for orderID: ${orderID}`);
         throw new BadRequestException('Payment not found');
       }
 
       // Store old status for logging
       const oldStatus = payment.status;
 
+      // Map Orion event types to internal status
+      const newStatus = this.mapEventTypeToStatus(event_type);
+
       // Update payment status
-      payment.status = this.normalizeStatus(status);
+      payment.status = newStatus;
       payment.webhookData = payload;
       payment.updatedAt = new Date();
 
       // Set completion/failure timestamps
-      if (payment.status === 'SUCCESS' && oldStatus !== 'SUCCESS') {
+      if (newStatus === 'SUCCESS' && oldStatus !== 'SUCCESS') {
         payment.completedAt = new Date();
-        this.logger.log(`[ONRAMP] Payment completed: ${reference}`);
-      } else if (payment.status === 'FAILED' && oldStatus !== 'FAILED') {
+        this.logger.log(`[ONRAMP] Payment completed: ${payment.reference}`);
+      } else if (newStatus === 'FAILED' && oldStatus !== 'FAILED') {
         payment.failedAt = new Date();
-        this.logger.log(`[ONRAMP] Payment failed: ${reference}`);
+        if (failureReason) {
+          this.logger.log(`[ONRAMP] Payment failed: ${payment.reference} - Reason: ${failureReason}`);
+        } else {
+          this.logger.log(`[ONRAMP] Payment failed: ${payment.reference}`);
+        }
       }
 
       await payment.save();
-      this.logger.log(`[ONRAMP] Payment status updated: ${reference} - ${oldStatus} -> ${payment.status}`);
+      this.logger.log(`[ONRAMP] Payment status updated: ${payment.reference} - ${oldStatus} -> ${payment.status} (event: ${event_type})`);
 
       return {
         success: true,
         message: 'Webhook processed successfully',
-        reference,
+        reference: payment.reference,
         status: payment.status,
         previousStatus: oldStatus,
+        eventType: event_type,
       };
     } catch (error: any) {
       this.logger.error(`[ONRAMP] Error handling webhook: ${error?.message}`);
       this.logger.error(`[ONRAMP] Stack: ${error?.stack}`);
-      
+
       if (error instanceof BadRequestException) {
         throw error;
       }
-      
+
       throw new InternalServerErrorException('Failed to process webhook');
     }
+  }
+
+  /**
+   * Map Orion event types to internal status
+   */
+  private mapEventTypeToStatus(eventType: string): string {
+    if (!eventType) return 'PENDING';
+
+    const eventMap: Record<string, string> = {
+      'charge_success': 'PENDING', // Charged but tokens not yet transferred
+      'charge_failed': 'FAILED',
+      'token_transfer_pending': 'PENDING',
+      'token_transfer_success': 'SUCCESS', // Final success - tokens transferred
+      'token_transfer_failed': 'FAILED',
+      'account_not_associated': 'FAILED',
+    };
+
+    const status = eventMap[eventType.toLowerCase()];
+    if (status) {
+      return status;
+    }
+
+    // Fallback to old status mapping for backward compatibility
+    return this.normalizeStatus(eventType);
   }
 
   /**
@@ -412,27 +465,27 @@ export class OnrampService {
    */
   private normalizeStatus(status: string): string {
     if (!status) return 'PENDING';
-    
+
     const upperStatus = status.toUpperCase();
-    
+
     // Success variants
-    if (upperStatus === 'SUCCESS' || upperStatus === 'SUCCESSFUL' || 
-        upperStatus === 'COMPLETED' || upperStatus === 'COMPLETE') {
+    if (upperStatus === 'SUCCESS' || upperStatus === 'SUCCESSFUL' ||
+      upperStatus === 'COMPLETED' || upperStatus === 'COMPLETE') {
       return 'SUCCESS';
     }
-    
+
     // Failed variants
-    if (upperStatus === 'FAILED' || upperStatus === 'FAILURE' || 
-        upperStatus === 'DECLINED' || upperStatus === 'REJECTED') {
+    if (upperStatus === 'FAILED' || upperStatus === 'FAILURE' ||
+      upperStatus === 'DECLINED' || upperStatus === 'REJECTED') {
       return 'FAILED';
     }
-    
+
     // Pending variants
-    if (upperStatus === 'PENDING' || upperStatus === 'PROCESSING' || 
-        upperStatus === 'INITIATED') {
+    if (upperStatus === 'PENDING' || upperStatus === 'PROCESSING' ||
+      upperStatus === 'INITIATED') {
       return 'PENDING';
     }
-    
+
     // Return as-is if unknown (will be stored for debugging)
     this.logger.warn(`[ONRAMP] Unknown status received: ${status}`);
     return upperStatus;

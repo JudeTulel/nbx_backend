@@ -16,7 +16,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('onramp')
 export class OnrampController {
-  constructor(private readonly onrampService: OnrampService) {}
+  constructor(private readonly onrampService: OnrampService) { }
 
   /**
    * POST /onramp/initialize
@@ -50,22 +50,29 @@ export class OnrampController {
    * NO AUTHENTICATION - Orion Ramp cannot send JWT tokens
    * 
    * This endpoint receives payment status updates automatically:
-   * - PENDING → SUCCESS (payment completed, tokens sent)
-   * - PENDING → FAILED (payment declined/failed)
+   * - charge_success: Payment completed successfully
+   * - charge_failed: Payment failed
+   * - token_transfer_pending: Token transfer started
+   * - token_transfer_success: Tokens transferred successfully
+   * - token_transfer_failed: Token transfer failed
    * 
    * Example payload from Orion:
    * {
-   *   "reference": "ref_abc123",
-   *   "status": "success",
-   *   "orderID": "uuid",
+   *   "event_type": "charge_success",
+   *   "order_id": "q1w2e3r4",
+   *   "token": "KESy_TESTNET",
    *   "amount": 1000,
    *   "currency": "KES"
    * }
    */
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
-  async handleWebhook(@Body() payload: any) {
-    return await this.onrampService.handleWebhook(payload);
+  async handleWebhook(
+    @Body() payload: any,
+    @Req() req: any,
+  ) {
+    const signature = req.headers['x-orion-signature'];
+    return await this.onrampService.handleWebhook(payload, signature);
   }
 
   /**
@@ -89,7 +96,7 @@ export class OnrampController {
     const userEmail = req.user?.useremail;
     const limitNum = limit ? Math.min(parseInt(limit, 10), 100) : 50; // Max 100
     const skipNum = skip ? parseInt(skip, 10) : 0;
-    
+
     return await this.onrampService.getUserPayments(userEmail, limitNum, skipNum);
   }
 
@@ -144,7 +151,7 @@ export class OnrampController {
   ) {
     const userEmail = req.user?.useremail;
     const isVerified = await this.onrampService.verifyPayment(reference, userEmail);
-    
+
     return {
       success: true,
       reference,
