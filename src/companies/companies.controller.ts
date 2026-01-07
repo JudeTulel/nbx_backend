@@ -121,6 +121,24 @@ export class CompaniesController {
   }
 
   /**
+   * GET /companies/securities/all
+   * Get all deployed securities (equities and bonds) for IPO/Premarket page
+   * Public endpoint - no auth required
+   */
+  @Get('securities/all')
+  async findAllSecurities(
+    @Query('type') type?: 'equity' | 'bond' | 'all',
+    @Query('status') status?: string,
+  ) {
+    const securities = await this.companiesService.findAllSecurities(type || 'all', status);
+    return {
+      success: true,
+      count: securities.length,
+      data: securities,
+    };
+  }
+
+  /**
    * GET /companies/user/:email
    * Get companies by user email
    */

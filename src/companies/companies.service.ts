@@ -474,6 +474,147 @@ export class CompaniesService {
   }
 
   // ============================================
+  // SECURITIES (IPO/PREMARKET) METHODS
+  // ============================================
+
+  /**
+   * Get all deployed securities (equities and bonds) for IPO/Premarket page
+   * Includes company details for each security
+   */
+  async findAllSecurities(
+    type: 'equity' | 'bond' | 'all' = 'all',
+    status?: string,
+  ): Promise<any[]> {
+    try {
+      const securities: any[] = [];
+
+      // Build status filter
+      const statusFilter = status ? { status } : { status: 'active' };
+
+      // Fetch equities with company data
+      if (type === 'all' || type === 'equity') {
+        const equities = await this.equityModel
+          .aggregate([
+            { $match: statusFilter },
+            {
+              $lookup: {
+                from: 'companies',
+                localField: 'companyId',
+                foreignField: '_id',
+                as: 'company',
+              },
+            },
+            { $unwind: { path: '$company', preserveNullAndEmptyArrays: true } },
+            { $sort: { createdAt: -1 } },
+          ])
+          .exec();
+
+        for (const equity of equities) {
+          securities.push({
+            id: equity._id,
+            type: 'equity',
+            name: equity.name,
+            symbol: equity.symbol,
+            isin: equity.isin,
+            assetAddress: equity.assetAddress,
+            diamondAddress: equity.diamondAddress,
+            totalSupply: equity.totalSupply,
+            nominalValue: equity.nominalValue,
+            currency: equity.currency,
+            decimals: equity.decimals,
+            dividendYield: equity.dividendYield,
+            votingRights: equity.votingRights,
+            status: equity.status,
+            network: equity.network,
+            tokenizedAt: equity.tokenizedAt,
+            createdAt: equity.createdAt,
+            paymentTokens: equity.paymentTokens || ['0.0.7228867'], // Default to KESy
+            // Company details
+            company: equity.company ? {
+              id: equity.company._id,
+              name: equity.company.name,
+              ticker: equity.company.ticker,
+              symbol: equity.company.symbol,
+              sector: equity.company.sector,
+              description: equity.company.description,
+              marketCap: equity.company.marketCap,
+              documents: equity.company.documents,
+              team: equity.company.team,
+              highlights: equity.company.highlights,
+              priceHistory: equity.company.priceHistory,
+            } : null,
+          });
+        }
+      }
+
+      // Fetch bonds with company data
+      if (type === 'all' || type === 'bond') {
+        const bonds = await this.bondModel
+          .aggregate([
+            { $match: statusFilter },
+            {
+              $lookup: {
+                from: 'companies',
+                localField: 'companyId',
+                foreignField: '_id',
+                as: 'company',
+              },
+            },
+            { $unwind: { path: '$company', preserveNullAndEmptyArrays: true } },
+            { $sort: { createdAt: -1 } },
+          ])
+          .exec();
+
+        for (const bond of bonds) {
+          securities.push({
+            id: bond._id,
+            type: 'bond',
+            name: bond.name,
+            symbol: bond.symbol,
+            isin: bond.isin,
+            assetAddress: bond.assetAddress,
+            diamondAddress: bond.diamondAddress,
+            totalSupply: bond.totalSupply,
+            nominalValue: bond.nominalValue,
+            currency: bond.currency,
+            decimals: bond.decimals,
+            couponRate: bond.couponRate,
+            maturityDate: bond.maturityDate,
+            couponFrequency: bond.couponFrequency,
+            status: bond.status,
+            network: bond.network,
+            tokenizedAt: bond.tokenizedAt,
+            createdAt: bond.createdAt,
+            paymentTokens: bond.paymentTokens || ['0.0.7228867'], // Default to KESy
+            // Company details
+            company: bond.company ? {
+              id: bond.company._id,
+              name: bond.company.name,
+              ticker: bond.company.ticker,
+              symbol: bond.company.symbol,
+              sector: bond.company.sector,
+              description: bond.company.description,
+              marketCap: bond.company.marketCap,
+              documents: bond.company.documents,
+              team: bond.company.team,
+              highlights: bond.company.highlights,
+              priceHistory: bond.company.priceHistory,
+            } : null,
+          });
+        }
+      }
+
+      // Sort all securities by creation date
+      securities.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      return securities;
+    } catch (error: any) {
+      this.logger.error(`Failed to find all securities: ${error.message}`);
+      throw new InternalServerErrorException('Failed to retrieve securities');
+    }
+  }
+
+  // ============================================
   // EQUITY METHODS
   // ============================================
 

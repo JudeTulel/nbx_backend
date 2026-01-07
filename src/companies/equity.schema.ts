@@ -108,6 +108,11 @@ export class Equity extends Document {
     @Prop({ type: Boolean, default: true })
     isTokenized: boolean;
 
+    // Payment tokens accepted for purchasing this security
+    // Default is KESy (0.0.7228867) - the platform's default payment token
+    @Prop({ type: [String], default: ['0.0.7228867'] })
+    paymentTokens: string[];
+
     @Prop()
     tokenizedAt: Date;
 }
