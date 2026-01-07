@@ -11,6 +11,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { UserService } from './users.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 // DTO for user registration
 export class CreateUserDto {
@@ -39,7 +42,7 @@ export class UpdateRoleDto {
 
 @Controller('users')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(private readonly userService: UserService) { }
 
   /**
    * Register a new user
@@ -48,7 +51,7 @@ export class UserController {
   @HttpCode(HttpStatus.CREATED)
   async register(@Body() createUserDto: CreateUserDto) {
     const { useremail, password, hederaAccountId, role = 'investor' } = createUserDto;
-    
+
     const user = await this.userService.createUser(
       useremail,
       password,
@@ -76,7 +79,7 @@ export class UserController {
   @HttpCode(HttpStatus.OK)
   async login(@Body() loginDto: LoginDto) {
     const { useremail, password } = loginDto;
-    
+
     const user = await this.userService.login(useremail, password);
 
     // Return user without sensitive data
@@ -129,7 +132,7 @@ export class UserController {
     @Body() updatePasswordDto: UpdatePasswordDto,
   ) {
     const { currentPassword, newPassword } = updatePasswordDto;
-    
+
     await this.userService.updatePassword(
       useremail,
       currentPassword,
@@ -142,16 +145,18 @@ export class UserController {
   }
 
   /**
-   * Update user role
+   * Update user role (admin only)
    */
   @Put('role/:useremail')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @HttpCode(HttpStatus.OK)
   async updateRole(
     @Param('useremail') useremail: string,
     @Body() updateRoleDto: UpdateRoleDto,
   ) {
     const { newRole } = updateRoleDto;
-    
+
     const user = await this.userService.updateUserRole(useremail, newRole);
 
     return {
@@ -165,9 +170,11 @@ export class UserController {
   }
 
   /**
-   * Delete user
+   * Delete user (admin only)
    */
   @Delete(':useremail')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   @HttpCode(HttpStatus.OK)
   async deleteUser(@Param('useremail') useremail: string) {
     await this.userService.deleteUser(useremail);

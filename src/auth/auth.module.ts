@@ -17,13 +17,18 @@ import { UsersModule } from '../users/users.module';
       useFactory: async (
         configService: ConfigService,
       ): Promise<JwtModuleOptions> => {
+        const secret = configService.get<string>('JWT_SECRET');
+        if (!secret) {
+          throw new Error('JWT_SECRET environment variable is required');
+        }
+
         const expiresInConfig = configService.get<string>('JWT_EXPIRES_IN');
         const expiresIn = expiresInConfig && !isNaN(Number(expiresInConfig))
           ? Number(expiresInConfig)
           : 3600;
 
         return {
-          secret: configService.get<string>('JWT_SECRET') || 'nbx-secret',
+          secret,
           signOptions: { expiresIn },
         };
       },
@@ -34,4 +39,4 @@ import { UsersModule } from '../users/users.module';
   providers: [AuthService, JwtStrategy],
   exports: [AuthService],
 })
-export class AuthModule {}
+export class AuthModule { }
