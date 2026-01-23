@@ -1,0 +1,29 @@
+export declare class CreateBondDto {
+    name: string;
+    symbol: string;
+    isin?: string;
+    decimals?: number;
+    totalSupply: string;
+    faceValue?: string;
+    nominalValue?: string;
+    currency?: string;
+    couponRate: number;
+    startingDate?: number;
+    maturityDate: number;
+    isControllable?: boolean;
+    isBlocklist?: boolean;
+    clearingModeEnabled?: boolean;
+    internalKycActivated?: boolean;
+    regulationType?: string;
+    regulationSubType?: string;
+    assetAddress: string;
+    diamondAddress?: string;
+    transactionId?: string;
+    treasuryAccountId?: string;
+    issuer?: string;
+    companyName?: string;
+    network?: string;
+    status?: string;
+    isTokenized?: boolean;
+    tokenizedAt?: string;
+}

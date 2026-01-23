@@ -1,0 +1,34 @@
+export declare class CreateEquityDto {
+    name: string;
+    symbol: string;
+    isin?: string;
+    decimals?: number;
+    totalSupply: string;
+    nominalValue?: string;
+    currency?: string;
+    dividendYield?: number;
+    dividendType?: number;
+    votingRights?: boolean;
+    informationRights?: boolean;
+    liquidationRights?: boolean;
+    subscriptionRights?: boolean;
+    conversionRights?: boolean;
+    redemptionRights?: boolean;
+    putRight?: boolean;
+    isControllable?: boolean;
+    isBlocklist?: boolean;
+    isApprovalList?: boolean;
+    clearingModeEnabled?: boolean;
+    internalKycActivated?: boolean;
+    regulationType?: string;
+    regulationSubType?: string;
+    assetAddress: string;
+    diamondAddress?: string;
+    transactionId?: string;
+    treasuryAccountId?: string;
+    companyName?: string;
+    network?: string;
+    status?: string;
+    isTokenized?: boolean;
+    tokenizedAt?: string;
+}
