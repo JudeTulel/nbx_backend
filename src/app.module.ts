@@ -17,6 +17,7 @@ import { AuthModule } from './auth/auth.module';
 // import { CorporateActionsModule } from './corporate-actions/corporate-actions.module';
 import { KYCModule } from './kyc/kyc.module';
 import { OnrampModule } from './onramp/onramp.module';
+import { TradeModule } from './modules/trade/trade.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { OnrampModule } from './onramp/onramp.module';
     AuthModule,
     KYCModule,
     OnrampModule,
+    TradeModule,
     // HederaModule,
     // TokenizationModule,
     // EquityModule,

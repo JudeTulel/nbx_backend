@@ -489,7 +489,9 @@ export class CompaniesService {
       const securities: any[] = [];
 
       // Build status filter
-      const statusFilter = status ? { status } : { status: 'active' };
+      // Use case-insensitive regex to handle 'Active', 'active', etc.
+      const statusParam = status || 'active';
+      const statusFilter = { status: { $regex: new RegExp(`^${statusParam}$`, 'i') } };
 
       // Fetch equities with company data
       if (type === 'all' || type === 'equity') {
@@ -529,6 +531,7 @@ export class CompaniesService {
             tokenizedAt: equity.tokenizedAt,
             createdAt: equity.createdAt,
             paymentTokens: equity.paymentTokens || ['0.0.7228867'], // Default to KESy
+            treasuryAccountId: equity.treasuryAccountId,
             // Company details
             company: equity.company ? {
               id: equity.company._id,
@@ -586,6 +589,7 @@ export class CompaniesService {
             tokenizedAt: bond.tokenizedAt,
             createdAt: bond.createdAt,
             paymentTokens: bond.paymentTokens || ['0.0.7228867'], // Default to KESy
+            treasuryAccountId: bond.treasuryAccountId,
             // Company details
             company: bond.company ? {
               id: bond.company._id,
@@ -639,9 +643,10 @@ export class CompaniesService {
       const savedEquity = await equity.save();
 
       // Update company tokenization status
+      // We do not set 'tokenId' here because a company can have multiple securities (equities/bonds).
+      // The 'isTokenized' flag dictates if the company has entered the blockchain space.
       await this.companyModel.findByIdAndUpdate(companyId, {
         isTokenized: true,
-        tokenId: createEquityDto.assetAddress,
       });
 
       this.logger.log(`Equity created for company ${companyId}: ${savedEquity.name} (${savedEquity.assetAddress})`);
@@ -710,6 +715,11 @@ export class CompaniesService {
       });
 
       const savedBond = await bond.save();
+
+      // Update company to reflect it is tokenized (if not already)
+      await this.companyModel.findByIdAndUpdate(companyId, {
+        isTokenized: true,
+      });
 
       this.logger.log(`Bond created for company ${companyId}: ${savedBond.name} (${savedBond.assetAddress})`);
 
