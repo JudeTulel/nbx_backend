@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UploadsModule = void 0;
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
+const config_1 = require("@nestjs/config");
 const uploads_controller_1 = require("./uploads.controller");
 const uploads_service_1 = require("./uploads.service");
 const company_schema_1 = require("../companies/company.schema");
@@ -19,6 +20,7 @@ exports.UploadsModule = UploadsModule;
 exports.UploadsModule = UploadsModule = __decorate([
     (0, common_1.Module)({
         imports: [
+            config_1.ConfigModule,
             mongoose_1.MongooseModule.forFeature([
                 { name: company_schema_1.Company.name, schema: company_schema_1.CompanySchema },
                 { name: kyc_schema_1.KYC.name, schema: kyc_schema_1.KYCSchema },

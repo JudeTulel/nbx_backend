@@ -18,6 +18,9 @@ const platform_express_1 = require("@nestjs/platform-express");
 const kyc_service_1 = require("./kyc.service");
 const uploads_service_1 = require("../uploads/uploads.service");
 const kyc_dto_1 = require("./dto/kyc.dto");
+const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const roles_guard_1 = require("../auth/roles.guard");
+const roles_decorator_1 = require("../auth/roles.decorator");
 let KYCController = class KYCController {
     kycService;
     uploadsService;
@@ -92,6 +95,7 @@ let KYCController = class KYCController {
 exports.KYCController = KYCController;
 __decorate([
     (0, common_1.Post)('submit'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.UseInterceptors)((0, platform_express_1.FileFieldsInterceptor)([
         { name: 'frontImage', maxCount: 1 },
         { name: 'backImage', maxCount: 1 },
@@ -104,6 +108,7 @@ __decorate([
 ], KYCController.prototype, "submitKYC", null);
 __decorate([
     (0, common_1.Get)('status/user/:userId'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Param)('userId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -111,6 +116,7 @@ __decorate([
 ], KYCController.prototype, "getKYCStatusByUserId", null);
 __decorate([
     (0, common_1.Get)('status/email/:email'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Param)('email')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -125,6 +131,8 @@ __decorate([
 ], KYCController.prototype, "checkKYCApproval", null);
 __decorate([
     (0, common_1.Get)('all'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin', 'auditor'),
     __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [kyc_dto_1.KYCQueryDto]),
@@ -132,12 +140,16 @@ __decorate([
 ], KYCController.prototype, "getAllKYC", null);
 __decorate([
     (0, common_1.Get)('stats'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], KYCController.prototype, "getKYCStats", null);
 __decorate([
     (0, common_1.Put)('review/:id'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin', 'auditor'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -146,6 +158,8 @@ __decorate([
 ], KYCController.prototype, "reviewKYC", null);
 __decorate([
     (0, common_1.Delete)(':id'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin'),
     __param(0, (0, common_1.Param)('id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),

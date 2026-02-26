@@ -126,6 +126,27 @@ npm run start:dev
 npm run start:prod
 ```
 
+### S3 Configuration
+
+File uploads use AWS S3. Add these variables to your `.env`:
+
+```env
+# Required
+AWS_S3_BUCKET=your-bucket-name
+
+# Optional (defaults shown)
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your-access-key-id
+AWS_SECRET_ACCESS_KEY=your-secret-access-key
+AWS_S3_ENDPOINT=
+AWS_S3_FORCE_PATH_STYLE=false
+AWS_S3_PUBLIC_BASE_URL=
+```
+
+Notes:
+- `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are optional when using IAM role credentials.
+- Set `AWS_S3_PUBLIC_BASE_URL` if you serve files through CloudFront/CDN or a custom S3 domain.
+
 ### Testing
 
 ```bash

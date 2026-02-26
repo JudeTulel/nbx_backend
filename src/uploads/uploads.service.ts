@@ -1,10 +1,26 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { ConfigService } from '@nestjs/config';
 import { Model } from 'mongoose';
 import { Company } from '../companies/company.schema';
 import { KYC } from '../kyc/kyc.schema';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+  S3ClientConfig,
+} from '@aws-sdk/client-s3';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Readable } from 'stream';
 
 export enum UploadCategory {
   COMPANY_DOCUMENTS = 'company-documents',
@@ -30,6 +46,10 @@ export interface UploadResult {
 export class UploadsService {
   private readonly logger = new Logger(UploadsService.name);
   private readonly uploadDir = path.join(process.cwd(), 'uploads');
+  private readonly s3Client: S3Client;
+  private readonly bucketName: string;
+  private readonly region: string;
+  private readonly publicBaseUrl?: string;
 
   // Allowed file types per category
   private readonly allowedMimeTypes = {
@@ -77,8 +97,45 @@ export class UploadsService {
   constructor(
     @InjectModel(Company.name) private readonly companyModel: Model<Company>,
     @InjectModel(KYC.name) private readonly kycModel: Model<KYC>,
+    private readonly configService: ConfigService,
   ) {
+    this.region = this.configService.get<string>('AWS_REGION') || 'us-east-1';
+    this.bucketName = this.configService.get<string>('AWS_S3_BUCKET') || '';
+    this.publicBaseUrl = this.configService.get<string>('AWS_S3_PUBLIC_BASE_URL');
+
+    const s3Config: S3ClientConfig = {
+      region: this.region,
+      forcePathStyle:
+        (this.configService.get<string>('AWS_S3_FORCE_PATH_STYLE') || 'false').toLowerCase() ===
+        'true',
+    };
+
+    const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
+    const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
+    if (accessKeyId && secretAccessKey) {
+      s3Config.credentials = { accessKeyId, secretAccessKey };
+    }
+
+    const endpoint = this.configService.get<string>('AWS_S3_ENDPOINT');
+    if (endpoint) {
+      s3Config.endpoint = endpoint;
+    }
+
+    this.s3Client = new S3Client(s3Config);
+
+    if (!this.bucketName) {
+      this.logger.warn(
+        'AWS_S3_BUCKET is not configured. Upload endpoints will fail until it is set.',
+      );
+    }
+
     this.ensureUploadDirectories();
+  }
+
+  private ensureS3Configured(): void {
+    if (!this.bucketName) {
+      throw new InternalServerErrorException('AWS S3 bucket is not configured');
+    }
   }
 
   /**
@@ -117,8 +174,109 @@ export class UploadsService {
     }
   }
 
+  private generateObjectKey(category: UploadCategory, fileName: string): string {
+    return `${category}/${fileName}`;
+  }
+
+  private buildPublicUrl(key: string): string {
+    if (this.publicBaseUrl) {
+      return `${this.publicBaseUrl.replace(/\/$/, '')}/${key}`;
+    }
+
+    return `https://${this.bucketName}.s3.${this.region}.amazonaws.com/${key}`;
+  }
+
+  private async streamToBuffer(body: unknown): Promise<Buffer> {
+    if (!body) {
+      throw new NotFoundException('File body is empty');
+    }
+
+    if (Buffer.isBuffer(body)) {
+      return body;
+    }
+
+    if (body instanceof Readable) {
+      const chunks: Buffer[] = [];
+      for await (const chunk of body) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      return Buffer.concat(chunks);
+    }
+
+    throw new InternalServerErrorException('Unsupported S3 object body type');
+  }
+
+  private extractObjectKey(value?: string | null): string | null {
+    if (!value) {
+      return null;
+    }
+
+    const normalized = value.replace(/\\/g, '/');
+
+    if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+      try {
+        const pathname = decodeURIComponent(new URL(normalized).pathname).replace(/^\/+/, '');
+        if (pathname.startsWith(`${this.bucketName}/`)) {
+          return pathname.substring(this.bucketName.length + 1);
+        }
+        return pathname || null;
+      } catch {
+        return null;
+      }
+    }
+
+    const uploadsMarker = '/uploads/';
+    const uploadsIndex = normalized.lastIndexOf(uploadsMarker);
+    if (uploadsIndex >= 0) {
+      return normalized.substring(uploadsIndex + uploadsMarker.length);
+    }
+
+    for (const category of Object.values(UploadCategory)) {
+      const categoryMarker = `/${category}/`;
+      const categoryIndex = normalized.lastIndexOf(categoryMarker);
+      if (categoryIndex >= 0) {
+        return normalized.substring(categoryIndex + 1);
+      }
+      if (normalized.startsWith(`${category}/`)) {
+        return normalized;
+      }
+    }
+
+    return normalized.includes('/') ? normalized : null;
+  }
+
+  private getLegacyLocalPathFromKey(objectKey: string): string {
+    return path.join(this.uploadDir, objectKey);
+  }
+
+  private async listAllObjects(prefix: string): Promise<Array<{ key: string; size: number }>> {
+    this.ensureS3Configured();
+    const results: Array<{ key: string; size: number }> = [];
+    let continuationToken: string | undefined;
+
+    do {
+      const response = await this.s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucketName,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        }),
+      );
+
+      for (const item of response.Contents || []) {
+        if (item.Key) {
+          results.push({ key: item.Key, size: item.Size || 0 });
+        }
+      }
+
+      continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    return results;
+  }
+
   /**
-   * Universal upload method - saves file to disk
+   * Universal upload method - uploads file to S3
    */
   async uploadFile(
     file: Express.Multer.File,
@@ -126,27 +284,35 @@ export class UploadsService {
     metadata?: any,
   ): Promise<UploadResult> {
     try {
+      this.ensureS3Configured();
+
       // Validate file
       this.validateFile(file, category);
 
       // Generate unique filename
       const fileExtension = path.extname(file.originalname);
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}${fileExtension}`;
-      const categoryDir = path.join(this.uploadDir, category);
-      const filePath = path.join(categoryDir, fileName);
+      const objectKey = this.generateObjectKey(category, fileName);
 
-      // Save file to disk
-      fs.writeFileSync(filePath, file.buffer);
+      // Upload to S3
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucketName,
+          Key: objectKey,
+          Body: file.buffer,
+          ContentType: file.mimetype,
+          Metadata: metadata,
+        }),
+      );
 
-      // Generate public URL (adjust based on your setup)
-      const publicUrl = `/uploads/${category}/${fileName}`;
+      const publicUrl = this.buildPublicUrl(objectKey);
 
       this.logger.log(`File uploaded: ${fileName} (${category})`);
 
       return {
         fileName,
         originalName: file.originalname,
-        filePath,
+        filePath: objectKey,
         publicUrl,
         size: file.size,
         mimeType: file.mimetype,
@@ -288,31 +454,57 @@ export class UploadsService {
   }
 
   /**
-   * Get file from disk
+   * Get file from S3
    */
   async getFile(category: UploadCategory, fileName: string): Promise<Buffer> {
-    try {
-      const filePath = path.join(this.uploadDir, category, fileName);
+    this.ensureS3Configured();
 
-      if (!fs.existsSync(filePath)) {
+    const objectKey = this.generateObjectKey(category, fileName);
+    try {
+      const response = await this.s3Client.send(
+        new GetObjectCommand({
+          Bucket: this.bucketName,
+          Key: objectKey,
+        }),
+      );
+
+      return this.streamToBuffer(response.Body);
+    } catch (error) {
+      const legacyPath = this.getLegacyLocalPathFromKey(objectKey);
+      if (fs.existsSync(legacyPath)) {
+        return fs.readFileSync(legacyPath);
+      }
+
+      if (error?.name === 'NoSuchKey') {
         throw new NotFoundException('File not found');
       }
 
-      return fs.readFileSync(filePath);
-    } catch (error) {
       this.logger.error(`Failed to get file: ${error.message}`);
       throw error;
     }
   }
 
   /**
-   * Delete file from disk
+   * Delete file from S3 (with legacy local fallback)
    */
   async deleteFile(filePath: string): Promise<void> {
     try {
+      const objectKey = this.extractObjectKey(filePath);
+      if (objectKey) {
+        this.ensureS3Configured();
+        await this.s3Client.send(
+          new DeleteObjectCommand({
+            Bucket: this.bucketName,
+            Key: objectKey,
+          }),
+        );
+        this.logger.log(`S3 file deleted: ${objectKey}`);
+        return;
+      }
+
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
-        this.logger.log(`File deleted: ${filePath}`);
+        this.logger.log(`Legacy local file deleted: ${filePath}`);
       }
     } catch (error) {
       this.logger.error(`Failed to delete file: ${error.message}`);
@@ -375,14 +567,8 @@ export class UploadsService {
       }
 
       // Extract file paths from URLs
-      const frontPath = path.join(
-        this.uploadDir,
-        kyc.frontImageUrl.replace('/uploads/', ''),
-      );
-      const backPath = path.join(
-        this.uploadDir,
-        kyc.backImageUrl.replace('/uploads/', ''),
-      );
+      const frontPath = this.extractObjectKey(kyc.frontImageUrl) || '';
+      const backPath = this.extractObjectKey(kyc.backImageUrl) || '';
 
       // Delete both files
       await this.deleteFile(frontPath);
@@ -416,7 +602,7 @@ export class UploadsService {
   }
 
   /**
-   * Clean up orphaned files (files not referenced in database)
+   * Clean up orphaned files (S3 objects not referenced in database)
    * Run this periodically as a cron job
    */
   async cleanupOrphanedFiles(): Promise<{ deletedCount: number }> {
@@ -429,8 +615,13 @@ export class UploadsService {
       
       companies.forEach((company) => {
         company.documents?.forEach((doc: any) => {
-          if (doc.fileName) {
-            referencedCompanyFiles.add(doc.fileName);
+          const key =
+            this.extractObjectKey(doc.path) ||
+            (doc.fileName
+              ? this.generateObjectKey(UploadCategory.COMPANY_DOCUMENTS, doc.fileName)
+              : null);
+          if (key) {
+            referencedCompanyFiles.add(key);
           }
         });
       });
@@ -442,45 +633,35 @@ export class UploadsService {
       const referencedKYCFiles = new Set<string>();
       
       kycDocs.forEach((kyc) => {
-        if (kyc.frontImageUrl) {
-          const fileName = path.basename(kyc.frontImageUrl);
-          referencedKYCFiles.add(fileName);
+        const frontKey = this.extractObjectKey(kyc.frontImageUrl);
+        const backKey = this.extractObjectKey(kyc.backImageUrl);
+        if (frontKey) {
+          referencedKYCFiles.add(frontKey);
         }
-        if (kyc.backImageUrl) {
-          const fileName = path.basename(kyc.backImageUrl);
-          referencedKYCFiles.add(fileName);
+        if (backKey) {
+          referencedKYCFiles.add(backKey);
         }
       });
 
-      // Check company documents directory
-      const companyDocsDir = path.join(
-        this.uploadDir,
-        UploadCategory.COMPANY_DOCUMENTS,
+      // Check company documents objects
+      const companyObjects = await this.listAllObjects(
+        `${UploadCategory.COMPANY_DOCUMENTS}/`,
       );
-      if (fs.existsSync(companyDocsDir)) {
-        const files = fs.readdirSync(companyDocsDir);
-        for (const file of files) {
-          if (!referencedCompanyFiles.has(file)) {
-            const filePath = path.join(companyDocsDir, file);
-            fs.unlinkSync(filePath);
-            deletedCount++;
-          }
+      for (const object of companyObjects) {
+        if (!referencedCompanyFiles.has(object.key)) {
+          await this.deleteFile(object.key);
+          deletedCount++;
         }
       }
 
-      // Check KYC documents directory
-      const kycDocsDir = path.join(
-        this.uploadDir,
-        UploadCategory.KYC_DOCUMENTS,
+      // Check KYC document objects
+      const kycObjects = await this.listAllObjects(
+        `${UploadCategory.KYC_DOCUMENTS}/`,
       );
-      if (fs.existsSync(kycDocsDir)) {
-        const files = fs.readdirSync(kycDocsDir);
-        for (const file of files) {
-          if (!referencedKYCFiles.has(file)) {
-            const filePath = path.join(kycDocsDir, file);
-            fs.unlinkSync(filePath);
-            deletedCount++;
-          }
+      for (const object of kycObjects) {
+        if (!referencedKYCFiles.has(object.key)) {
+          await this.deleteFile(object.key);
+          deletedCount++;
         }
       }
 
@@ -497,6 +678,8 @@ export class UploadsService {
    * Get storage statistics
    */
   async getStorageStats(): Promise<any> {
+    this.ensureS3Configured();
+
     try {
       const stats = {
         totalSize: 0,
@@ -505,25 +688,18 @@ export class UploadsService {
       };
 
       Object.values(UploadCategory).forEach((category) => {
-        const categoryDir = path.join(this.uploadDir, category);
-        let categorySize = 0;
-        let fileCount = 0;
+        stats.categorySizes[category] = 0;
+      });
 
-        if (fs.existsSync(categoryDir)) {
-          const files = fs.readdirSync(categoryDir);
-          fileCount = files.length;
-
-          files.forEach((file) => {
-            const filePath = path.join(categoryDir, file);
-            const fileStats = fs.statSync(filePath);
-            categorySize += fileStats.size;
-          });
-        }
+      for (const category of Object.values(UploadCategory)) {
+        const objects = await this.listAllObjects(`${category}/`);
+        const categorySize = objects.reduce((sum, object) => sum + object.size, 0);
+        const categoryCount = objects.length;
 
         stats.categorySizes[category] = categorySize;
         stats.totalSize += categorySize;
-        stats.fileCount += fileCount;
-      });
+        stats.fileCount += categoryCount;
+      }
 
       return stats;
     } catch (error) {

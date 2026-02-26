@@ -16,6 +16,9 @@ exports.UploadsController = void 0;
 const common_1 = require("@nestjs/common");
 const platform_express_1 = require("@nestjs/platform-express");
 const uploads_service_1 = require("./uploads.service");
+const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const roles_guard_1 = require("../auth/roles.guard");
+const roles_decorator_1 = require("../auth/roles.decorator");
 let UploadsController = class UploadsController {
     uploadsService;
     constructor(uploadsService) {
@@ -113,6 +116,7 @@ let UploadsController = class UploadsController {
 exports.UploadsController = UploadsController;
 __decorate([
     (0, common_1.Post)('company/:companyId/document'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file')),
     __param(0, (0, common_1.Param)('companyId')),
     __param(1, (0, common_1.UploadedFile)()),
@@ -123,6 +127,7 @@ __decorate([
 ], UploadsController.prototype, "uploadCompanyDocument", null);
 __decorate([
     (0, common_1.Post)('kyc/:userId'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.UseInterceptors)((0, platform_express_1.FileFieldsInterceptor)([
         { name: 'frontImage', maxCount: 1 },
         { name: 'backImage', maxCount: 1 },
@@ -135,6 +140,7 @@ __decorate([
 ], UploadsController.prototype, "uploadKYCDocuments", null);
 __decorate([
     (0, common_1.Post)('profile/:userId'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file')),
     __param(0, (0, common_1.Param)('userId')),
     __param(1, (0, common_1.UploadedFile)()),
@@ -162,6 +168,7 @@ __decorate([
 ], UploadsController.prototype, "downloadFile", null);
 __decorate([
     (0, common_1.Get)('company/:companyId/documents'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Param)('companyId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
@@ -169,6 +176,7 @@ __decorate([
 ], UploadsController.prototype, "getCompanyDocuments", null);
 __decorate([
     (0, common_1.Delete)('company/:companyId/document/:documentId'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Param)('companyId')),
     __param(1, (0, common_1.Param)('documentId')),
     __metadata("design:type", Function),
@@ -177,12 +185,16 @@ __decorate([
 ], UploadsController.prototype, "deleteCompanyDocument", null);
 __decorate([
     (0, common_1.Get)('admin/stats'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], UploadsController.prototype, "getStorageStats", null);
 __decorate([
     (0, common_1.Post)('admin/cleanup'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)

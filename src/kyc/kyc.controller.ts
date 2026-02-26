@@ -17,66 +17,66 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { KYCService } from './kyc.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { SubmitKYCDto, ReviewKYCDto, KYCQueryDto } from './dto/kyc.dto';
-// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-// import { RolesGuard } from '../auth/guards/roles.guard';
-// import { Roles } from '../auth/decorators/roles.decorator';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('kyc')
 export class KYCController {
   constructor(
     private readonly kycService: KYCService,
     private readonly uploadsService: UploadsService,
-  ) {}
+  ) { }
 
   /**
    * Submit KYC application with document uploads
    */
   @Post('submit')
-  // @UseGuards(JwtAuthGuard)
- @UseInterceptors(
-  FileFieldsInterceptor([
-    { name: 'frontImage', maxCount: 1 },
-    { name: 'backImage', maxCount: 1 },
-  ]),
-)
-async submitKYC(
-  @Body() dto: SubmitKYCDto,
-  @UploadedFiles() files: {
-    frontImage?: Express.Multer.File[];
-    backImage?: Express.Multer.File[];
-  },
-) {
-  if (!files.frontImage || !files.backImage) {
-    throw new BadRequestException('Both front and back images are required');
-  }
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FileFieldsInterceptor([
+      { name: 'frontImage', maxCount: 1 },
+      { name: 'backImage', maxCount: 1 },
+    ]),
+  )
+  async submitKYC(
+    @Body() dto: SubmitKYCDto,
+    @UploadedFiles() files: {
+      frontImage?: Express.Multer.File[];
+      backImage?: Express.Multer.File[];
+    },
+  ) {
+    if (!files.frontImage || !files.backImage) {
+      throw new BadRequestException('Both front and back images are required');
+    }
 
-  // Use the upload service
-  const { frontImageUrl, backImageUrl } =
-    await this.uploadsService.uploadKYCDocuments(
-      dto.userId,
-      files.frontImage[0],
-      files.backImage[0],
+    // Use the upload service
+    const { frontImageUrl, backImageUrl } =
+      await this.uploadsService.uploadKYCDocuments(
+        dto.userId,
+        files.frontImage[0],
+        files.backImage[0],
+      );
+
+    const result = await this.kycService.submitKYC(
+      dto,
+      frontImageUrl,
+      backImageUrl,
     );
 
-  const result = await this.kycService.submitKYC(
-    dto,
-    frontImageUrl,
-    backImageUrl,
-  );
+    return {
+      success: true,
+      message: 'KYC submitted successfully',
+      data: result,
+    };
+  }
 
-  return {
-    success: true,
-    message: 'KYC submitted successfully',
-    data: result,
-  };
-}
 
-  
   /**
    * Get KYC status by user ID (recommended)
    */
   @Get('status/user/:userId')
-  // @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard)
   async getKYCStatusByUserId(@Param('userId') userId: string) {
     const result = await this.kycService.getKYCByUserId(userId);
     return {
@@ -89,7 +89,7 @@ async submitKYC(
    * Get KYC status by email (fallback)
    */
   @Get('status/email/:email')
-  // @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard)
   async getKYCStatusByEmail(@Param('email') email: string) {
     const result = await this.kycService.getKYCByEmail(email);
     return {
@@ -114,8 +114,8 @@ async submitKYC(
    * Get all KYC submissions (admin only)
    */
   @Get('all')
-  // @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles('admin', 'auditor')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'auditor')
   async getAllKYC(@Query() query: KYCQueryDto) {
     const results = await this.kycService.getAllKYC(query);
     return {
@@ -129,8 +129,8 @@ async submitKYC(
    * Get KYC statistics (admin only)
    */
   @Get('stats')
-  // @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles('admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async getKYCStats() {
     const stats = await this.kycService.getKYCStats();
     return {
@@ -143,8 +143,8 @@ async submitKYC(
    * Review KYC submission (admin only)
    */
   @Put('review/:id')
-  // @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles('admin', 'auditor')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'auditor')
   async reviewKYC(
     @Param('id') id: string,
     @Body() dto: ReviewKYCDto,
@@ -161,8 +161,8 @@ async submitKYC(
    * Delete KYC submission (admin only)
    */
   @Delete(':id')
-  // @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles('admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async deleteKYC(@Param('id') id: string) {
     await this.kycService.deleteKYC(id);
     return {

@@ -19,19 +19,19 @@ import {
 } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { UploadsService, UploadCategory } from './uploads.service';
-// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-// import { RolesGuard } from '../auth/guards/roles.guard';
-// import { Roles } from '../auth/decorators/roles.decorator';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('uploads')
 export class UploadsController {
-  constructor(private readonly uploadsService: UploadsService) {}
+  constructor(private readonly uploadsService: UploadsService) { }
 
   /**
    * Upload company document
    */
   @Post('company/:companyId/document')
-  // @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file'))
   async uploadCompanyDocument(
     @Param('companyId') companyId: string,
@@ -57,7 +57,7 @@ export class UploadsController {
    * Upload KYC documents
    */
   @Post('kyc/:userId')
-  // @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(
     FileFieldsInterceptor([
       { name: 'frontImage', maxCount: 1 },
@@ -93,7 +93,7 @@ export class UploadsController {
    * Upload profile picture
    */
   @Post('profile/:userId')
-  // @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file'))
   async uploadProfilePicture(
     @Param('userId') userId: string,
@@ -148,7 +148,7 @@ export class UploadsController {
     const contentType = contentTypes[ext || ''] || 'application/octet-stream';
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
-    
+
     res.send(fileBuffer);
   }
 
@@ -172,7 +172,7 @@ export class UploadsController {
 
     res.setHeader('Content-Type', 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    
+
     res.send(fileBuffer);
   }
 
@@ -180,7 +180,7 @@ export class UploadsController {
    * Get company documents
    */
   @Get('company/:companyId/documents')
-  // @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard)
   async getCompanyDocuments(@Param('companyId') companyId: string) {
     const documents = await this.uploadsService.getCompanyDocuments(companyId);
     return {
@@ -194,7 +194,7 @@ export class UploadsController {
    * Delete company document
    */
   @Delete('company/:companyId/document/:documentId')
-  // @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard)
   async deleteCompanyDocument(
     @Param('companyId') companyId: string,
     @Param('documentId') documentId: string,
@@ -206,8 +206,8 @@ export class UploadsController {
    * Get storage statistics (admin only)
    */
   @Get('admin/stats')
-  // @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles('admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async getStorageStats() {
     const stats = await this.uploadsService.getStorageStats();
     return {
@@ -220,8 +220,8 @@ export class UploadsController {
    * Cleanup orphaned files (admin only)
    */
   @Post('admin/cleanup')
-  // @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles('admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async cleanupOrphanedFiles() {
     const result = await this.uploadsService.cleanupOrphanedFiles();
     return {
@@ -231,5 +231,5 @@ export class UploadsController {
     };
   }
 
- 
+
 }

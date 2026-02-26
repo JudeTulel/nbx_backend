@@ -98,6 +98,7 @@ export class UserController {
   /**
    * Get user profile
    */
+  @UseGuards(JwtAuthGuard)
   @Get('profile/:useremail')
   async getProfile(@Param('useremail') useremail: string) {
     const user = await this.userService.getUserProfile(useremail);
@@ -109,6 +110,7 @@ export class UserController {
   /**
    * Get user by Hedera account ID
    */
+  @UseGuards(JwtAuthGuard)
   @Get('hedera/:accountId')
   async getByHederaAccount(@Param('accountId') accountId: string) {
     const user = await this.userService.findByHederaAccount(accountId);
@@ -125,6 +127,7 @@ export class UserController {
   /**
    * Update user password
    */
+  @UseGuards(JwtAuthGuard)
   @Put('password/:useremail')
   @HttpCode(HttpStatus.OK)
   async updatePassword(

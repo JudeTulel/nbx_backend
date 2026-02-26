@@ -1,10 +1,12 @@
-import { Controller, Post, Body, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, BadRequestException, UseGuards } from '@nestjs/common';
 import { TradeService } from './trade.service';
+import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 
 @Controller('trade')
 export class TradeController {
     constructor(private readonly tradeService: TradeService) { }
 
+    @UseGuards(JwtAuthGuard)
     @Post('create-swap')
     async createSwap(@Body() body: any) {
         const {

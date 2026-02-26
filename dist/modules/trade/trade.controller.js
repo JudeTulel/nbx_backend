@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TradeController = void 0;
 const common_1 = require("@nestjs/common");
 const trade_service_1 = require("./trade.service");
+const jwt_auth_guard_1 = require("../../auth/jwt-auth.guard");
 let TradeController = class TradeController {
     tradeService;
     constructor(tradeService) {
@@ -36,6 +37,7 @@ let TradeController = class TradeController {
 };
 exports.TradeController = TradeController;
 __decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Post)('create-swap'),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),

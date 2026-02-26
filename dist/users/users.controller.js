@@ -133,6 +133,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], UserController.prototype, "login", null);
 __decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Get)('profile/:useremail'),
     __param(0, (0, common_1.Param)('useremail')),
     __metadata("design:type", Function),
@@ -140,6 +141,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], UserController.prototype, "getProfile", null);
 __decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Get)('hedera/:accountId'),
     __param(0, (0, common_1.Param)('accountId')),
     __metadata("design:type", Function),
@@ -147,6 +149,7 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], UserController.prototype, "getByHederaAccount", null);
 __decorate([
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Put)('password/:useremail'),
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     __param(0, (0, common_1.Param)('useremail')),
