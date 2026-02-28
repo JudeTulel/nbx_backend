@@ -17,9 +17,9 @@ async function bootstrap() {
   }));
 
   // ── CORS – Allowed Origins ────────────────────────────────────────
-  // Add new frontend domains to this array as needed
+  // new frontend domains to this array as needed
   const ALLOWED_ORIGINS: string[] = [
-    'https://nbx-exchange.vercel.app',
+    'https://nbx-exchange.co.ke',
   ];
 
   app.enableCors({
