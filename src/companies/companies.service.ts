@@ -13,10 +13,13 @@ import { Model, Types } from 'mongoose';
 import { Company } from './company.schema';
 import { Equity } from './equity.schema';
 import { Bond } from './bond.schema';
+import { Proposal } from './proposal.schema';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { CreateEquityDto } from './dto/create-equity.dto';
 import { CreateBondDto } from './dto/create-bond.dto';
+import { CreateProposalDto } from './dto/create-proposal.dto';
+import { VoteProposalDto } from './dto/vote-proposal.dto';
 import { UploadsService, UploadCategory } from '../uploads/uploads.service';
 
 @Injectable()
@@ -30,6 +33,8 @@ export class CompaniesService {
     private readonly equityModel: Model<Equity>,
     @InjectModel(Bond.name)
     private readonly bondModel: Model<Bond>,
+    @InjectModel(Proposal.name)
+    private readonly proposalModel: Model<Proposal>,
     private readonly uploadsService: UploadsService,
   ) { }
 
@@ -690,6 +695,161 @@ export class CompaniesService {
       this.logger.error(`Failed to find equity: ${error.message}`);
       throw new InternalServerErrorException('Failed to retrieve equity');
     }
+  }
+
+  // ============================================
+  // GOVERNANCE PROPOSALS METHODS
+  // ============================================
+
+  private async syncProposalStatuses(companyId?: string): Promise<void> {
+    const now = new Date();
+    const query: any = {
+      status: 'active',
+      endDate: { $lt: now },
+    };
+
+    if (companyId) {
+      query.companyId = new Types.ObjectId(companyId);
+    }
+
+    await this.proposalModel.updateMany(query, { $set: { status: 'closed' } }).exec();
+  }
+
+  async createProposal(
+    companyId: string,
+    dto: CreateProposalDto,
+    createdByAccountId?: string,
+    createdByEmail?: string,
+  ): Promise<Proposal> {
+    const company = await this.companyModel.findById(companyId).exec();
+    if (!company) {
+      throw new NotFoundException(`Company with ID ${companyId} not found`);
+    }
+
+    const endDate = new Date(dto.endDate);
+    if (Number.isNaN(endDate.getTime())) {
+      throw new BadRequestException('Invalid proposal endDate');
+    }
+    if (endDate <= new Date()) {
+      throw new BadRequestException('Proposal endDate must be in the future');
+    }
+
+    if (dto.equityId) {
+      const equity = await this.equityModel
+        .findOne({ _id: new Types.ObjectId(dto.equityId), companyId: new Types.ObjectId(companyId) })
+        .exec();
+      if (!equity) {
+        throw new BadRequestException('Selected equity does not belong to this company');
+      }
+    }
+
+    const proposal = new this.proposalModel({
+      companyId: new Types.ObjectId(companyId),
+      equityId: dto.equityId ? new Types.ObjectId(dto.equityId) : undefined,
+      title: dto.title,
+      description: dto.description,
+      proposalType: dto.proposalType || 'governance',
+      status: 'active',
+      startDate: new Date(),
+      endDate,
+      votesFor: 0,
+      votesAgainst: 0,
+      totalVotes: 0,
+      createdByAccountId,
+      createdByEmail,
+      votes: [],
+    });
+
+    return proposal.save();
+  }
+
+  async findProposalsByCompany(
+    companyId: string,
+    status?: 'active' | 'closed',
+  ): Promise<Proposal[]> {
+    await this.syncProposalStatuses(companyId);
+
+    const query: any = {
+      companyId: new Types.ObjectId(companyId),
+    };
+
+    if (status) {
+      query.status = status;
+    }
+
+    return this.proposalModel
+      .find(query)
+      .populate('companyId', 'name symbol')
+      .populate('equityId', 'name symbol votingRights')
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
+  async findInvestorProposals(status?: 'active' | 'closed'): Promise<Proposal[]> {
+    await this.syncProposalStatuses();
+    const query: any = {};
+    if (status) {
+      query.status = status;
+    }
+    return this.proposalModel
+      .find(query)
+      .populate('companyId', 'name symbol')
+      .populate('equityId', 'name symbol votingRights')
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
+  async voteOnProposal(
+    companyId: string,
+    proposalId: string,
+    dto: VoteProposalDto,
+  ): Promise<Proposal> {
+    await this.syncProposalStatuses(companyId);
+
+    const proposal = await this.proposalModel
+      .findOne({
+        _id: new Types.ObjectId(proposalId),
+        companyId: new Types.ObjectId(companyId),
+      })
+      .exec();
+
+    if (!proposal) {
+      throw new NotFoundException('Proposal not found');
+    }
+
+    if (proposal.status !== 'active') {
+      throw new BadRequestException('This proposal is already closed');
+    }
+
+    if (!dto.voterAccountId && !dto.voterEmail) {
+      throw new BadRequestException('voterAccountId or voterEmail is required');
+    }
+
+    const existingVote = proposal.votes.find(
+      (vote) =>
+        (!!dto.voterAccountId && vote.voterAccountId === dto.voterAccountId) ||
+        (!!dto.voterEmail && vote.voterEmail === dto.voterEmail),
+    );
+
+    if (existingVote) {
+      throw new BadRequestException('This voter has already voted on this proposal');
+    }
+
+    proposal.votes.push({
+      voterAccountId: dto.voterAccountId || 'unknown',
+      voterEmail: dto.voterEmail,
+      choice: dto.vote,
+      votedAt: new Date(),
+    } as any);
+
+    if (dto.vote === 'for') {
+      proposal.votesFor += 1;
+    } else {
+      proposal.votesAgainst += 1;
+    }
+    proposal.totalVotes = proposal.votesFor + proposal.votesAgainst;
+
+    return proposal.save();
   }
 
   // ============================================

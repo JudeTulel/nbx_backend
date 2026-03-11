@@ -7,6 +7,7 @@ import {
   Param,
   Query,
   Body,
+  Req,
   UseGuards,
   UploadedFiles,
   UseInterceptors,
@@ -17,6 +18,8 @@ import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CreateProposalDto } from './dto/create-proposal.dto';
+import { VoteProposalDto } from './dto/vote-proposal.dto';
 
 @Controller('companies')
 export class CompaniesController {
@@ -379,6 +382,92 @@ export class CompaniesController {
     return {
       success: true,
       data: bond,
+    };
+  }
+
+  // ============================================
+  // GOVERNANCE PROPOSALS ROUTES
+  // ============================================
+
+  /**
+   * POST /companies/:id/proposals
+   * Create a proposal for shareholder voting
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/proposals')
+  async createProposal(
+    @Param('id') id: string,
+    @Body() dto: CreateProposalDto,
+    @Req() req: any,
+  ) {
+    const proposal = await this.companiesService.createProposal(
+      id,
+      dto,
+      req.user?.hederaAccountId || req.user?.accountId,
+      req.user?.useremail || req.user?.email,
+    );
+
+    return {
+      success: true,
+      message: 'Proposal created successfully',
+      data: proposal,
+    };
+  }
+
+  /**
+   * GET /companies/:id/proposals
+   * List company proposals
+   */
+  @Get(':id/proposals')
+  async findCompanyProposals(
+    @Param('id') id: string,
+    @Query('status') status?: 'active' | 'closed',
+  ) {
+    const proposals = await this.companiesService.findProposalsByCompany(id, status);
+    return {
+      success: true,
+      count: proposals.length,
+      data: proposals,
+    };
+  }
+
+  /**
+   * GET /companies/investor/proposals
+   * List proposals for investor dashboard
+   */
+  @Get('investor/proposals')
+  async findInvestorProposals(@Query('status') status?: 'active' | 'closed') {
+    const proposals = await this.companiesService.findInvestorProposals(status);
+    return {
+      success: true,
+      count: proposals.length,
+      data: proposals,
+    };
+  }
+
+  /**
+   * POST /companies/:id/proposals/:proposalId/vote
+   * Submit a vote for a proposal
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/proposals/:proposalId/vote')
+  async voteOnProposal(
+    @Param('id') id: string,
+    @Param('proposalId') proposalId: string,
+    @Body() dto: VoteProposalDto,
+    @Req() req: any,
+  ) {
+    const payload: VoteProposalDto = {
+      vote: dto.vote,
+      voterAccountId: dto.voterAccountId || req.user?.hederaAccountId || req.user?.accountId,
+      voterEmail: dto.voterEmail || req.user?.useremail || req.user?.email,
+    };
+
+    const proposal = await this.companiesService.voteOnProposal(id, proposalId, payload);
+    return {
+      success: true,
+      message: 'Vote recorded',
+      data: proposal,
     };
   }
 }

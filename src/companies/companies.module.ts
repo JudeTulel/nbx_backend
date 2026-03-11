@@ -5,6 +5,7 @@ import { CompaniesService } from './companies.service';
 import { Company, CompanySchema } from './company.schema';
 import { Equity, EquitySchema } from './equity.schema';
 import { Bond, BondSchema } from './bond.schema';
+import { Proposal, ProposalSchema } from './proposal.schema';
 import { UploadsModule } from '../uploads/uploads.module';
 import { UsersModule } from 'src/users/users.module';
 
@@ -14,6 +15,7 @@ import { UsersModule } from 'src/users/users.module';
       { name: Company.name, schema: CompanySchema },
       { name: Equity.name, schema: EquitySchema },
       { name: Bond.name, schema: BondSchema },
+      { name: Proposal.name, schema: ProposalSchema },
     ]),
     UploadsModule,
     UsersModule,
