@@ -415,6 +415,20 @@ export class CompaniesController {
   }
 
   /**
+   * GET /companies/investor/proposals
+   * List proposals for investor dashboard
+   */
+  @Get('investor/proposals')
+  async findInvestorProposals(@Query('status') status?: 'active' | 'closed') {
+    const proposals = await this.companiesService.findInvestorProposals(status);
+    return {
+      success: true,
+      count: proposals.length,
+      data: proposals,
+    };
+  }
+
+  /**
    * GET /companies/:id/proposals
    * List company proposals
    */
@@ -424,20 +438,6 @@ export class CompaniesController {
     @Query('status') status?: 'active' | 'closed',
   ) {
     const proposals = await this.companiesService.findProposalsByCompany(id, status);
-    return {
-      success: true,
-      count: proposals.length,
-      data: proposals,
-    };
-  }
-
-  /**
-   * GET /companies/investor/proposals
-   * List proposals for investor dashboard
-   */
-  @Get('investor/proposals')
-  async findInvestorProposals(@Query('status') status?: 'active' | 'closed') {
-    const proposals = await this.companiesService.findInvestorProposals(status);
     return {
       success: true,
       count: proposals.length,

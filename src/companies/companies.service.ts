@@ -26,6 +26,13 @@ import { UploadsService, UploadCategory } from '../uploads/uploads.service';
 export class CompaniesService {
   private readonly logger = new Logger(CompaniesService.name);
 
+  private toObjectId(id: string, fieldName: string): Types.ObjectId {
+    if (!id || !Types.ObjectId.isValid(id)) {
+      throw new BadRequestException(`Invalid ${fieldName}`);
+    }
+    return new Types.ObjectId(id);
+  }
+
   constructor(
     @InjectModel(Company.name)
     private readonly companyModel: Model<Company>,
@@ -701,7 +708,7 @@ export class CompaniesService {
   // GOVERNANCE PROPOSALS METHODS
   // ============================================
 
-  private async syncProposalStatuses(companyId?: string): Promise<void> {
+  private async syncProposalStatuses(companyId?: Types.ObjectId): Promise<void> {
     const now = new Date();
     const query: any = {
       status: 'active',
@@ -709,7 +716,7 @@ export class CompaniesService {
     };
 
     if (companyId) {
-      query.companyId = new Types.ObjectId(companyId);
+      query.companyId = companyId;
     }
 
     await this.proposalModel.updateMany(query, { $set: { status: 'closed' } }).exec();
@@ -721,7 +728,9 @@ export class CompaniesService {
     createdByAccountId?: string,
     createdByEmail?: string,
   ): Promise<Proposal> {
-    const company = await this.companyModel.findById(companyId).exec();
+    const companyObjectId = this.toObjectId(companyId, 'companyId');
+
+    const company = await this.companyModel.findById(companyObjectId).exec();
     if (!company) {
       throw new NotFoundException(`Company with ID ${companyId} not found`);
     }
@@ -735,8 +744,9 @@ export class CompaniesService {
     }
 
     if (dto.equityId) {
+      const equityObjectId = this.toObjectId(dto.equityId, 'equityId');
       const equity = await this.equityModel
-        .findOne({ _id: new Types.ObjectId(dto.equityId), companyId: new Types.ObjectId(companyId) })
+        .findOne({ _id: equityObjectId, companyId: companyObjectId })
         .exec();
       if (!equity) {
         throw new BadRequestException('Selected equity does not belong to this company');
@@ -744,8 +754,8 @@ export class CompaniesService {
     }
 
     const proposal = new this.proposalModel({
-      companyId: new Types.ObjectId(companyId),
-      equityId: dto.equityId ? new Types.ObjectId(dto.equityId) : undefined,
+      companyId: companyObjectId,
+      equityId: dto.equityId ? this.toObjectId(dto.equityId, 'equityId') : undefined,
       title: dto.title,
       description: dto.description,
       proposalType: dto.proposalType || 'governance',
@@ -767,10 +777,11 @@ export class CompaniesService {
     companyId: string,
     status?: 'active' | 'closed',
   ): Promise<Proposal[]> {
-    await this.syncProposalStatuses(companyId);
+    const companyObjectId = this.toObjectId(companyId, 'companyId');
+    await this.syncProposalStatuses(companyObjectId);
 
     const query: any = {
-      companyId: new Types.ObjectId(companyId),
+      companyId: companyObjectId,
     };
 
     if (status) {
@@ -804,12 +815,15 @@ export class CompaniesService {
     proposalId: string,
     dto: VoteProposalDto,
   ): Promise<Proposal> {
-    await this.syncProposalStatuses(companyId);
+    const companyObjectId = this.toObjectId(companyId, 'companyId');
+    const proposalObjectId = this.toObjectId(proposalId, 'proposalId');
+
+    await this.syncProposalStatuses(companyObjectId);
 
     const proposal = await this.proposalModel
       .findOne({
-        _id: new Types.ObjectId(proposalId),
-        companyId: new Types.ObjectId(companyId),
+        _id: proposalObjectId,
+        companyId: companyObjectId,
       })
       .exec();
 
